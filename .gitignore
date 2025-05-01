@@ -2,3 +2,8 @@ debug/
 target/
 **/*.rs.bk
 *.pdb
+
+blobs
+conf
+db
+snap.*

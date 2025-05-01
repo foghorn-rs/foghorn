@@ -5,9 +5,14 @@ edition = "2024"
 license = "AGPL-3.0-only"
 
 [dependencies]
-iced = { git = "https://github.com/iced-rs/iced", default-features = false, features = ["tokio", "wgpu"] }
+iced = { git = "https://github.com/iced-rs/iced", default-features = false, features = [
+    "tokio",
+    "web-colors",
+    "wgpu",
+] }
 presage = { git = "https://github.com/whisperfish/presage" }
 presage-store-sled = { git = "https://github.com/whisperfish/presage" }
+tokio = { version = "1.44.2", features = ["rt"] }
 
 [patch.crates-io]
 curve25519-dalek = { git = 'https://github.com/signalapp/curve25519-dalek', tag = 'signal-curve25519-4.1.3' }
