@@ -1,8 +1,13 @@
-use crate::no_debug::NoDebug;
+use crate::{
+    dialog::{Action, Dialog},
+    no_debug::NoDebug,
+};
 use iced::{
-    Element, Task,
+    Element,
+    Length::Fill,
+    Task,
     futures::channel::oneshot,
-    widget::{button, qr_code},
+    widget::{button, container, qr_code},
 };
 use presage::{
     libsignal_service::configuration::SignalServers,
@@ -20,9 +25,11 @@ type ManagerError = presage::Error<<SledStore as Store>::Error>;
 
 #[derive(Clone, Debug)]
 pub enum Message {
-    ManagerStatus(ManagerStatus),
+    LoadManager(ManagerStatus),
     LinkSecondary,
     QrCode(String),
+    OpenDialog(Dialog),
+    CloseDialog,
 }
 
 #[expect(dead_code)]
@@ -38,6 +45,7 @@ pub enum ManagerStatus {
 pub struct App {
     manager_status: ManagerStatus,
     qr_code: Option<qr_code::Data>,
+    dialog: Dialog,
 }
 
 impl App {
@@ -59,15 +67,30 @@ impl App {
 
         (
             Self::default(),
-            Task::perform(non_send_fut(move || load_manager), Message::ManagerStatus),
+            Task::perform(non_send_fut(move || load_manager), Message::LoadManager),
         )
     }
 
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
-            Message::ManagerStatus(manager_status) => {
-                self.manager_status = manager_status;
+            Message::LoadManager(manager_status) => {
+                self.manager_status = manager_status.clone();
                 self.qr_code = None;
+                self.dialog.close();
+
+                if let ManagerStatus::ManagerError(_, error) = manager_status {
+                    return match error.as_ref() {
+                        &presage::Error::NotYetRegisteredError => {
+                            Task::done(Message::LinkSecondary)
+                        }
+                        err => Dialog::new(
+                            "Oops! Something went wrong.",
+                            err.to_string(),
+                            Action::Close,
+                        )
+                        .into(),
+                    };
+                }
             }
             Message::LinkSecondary => {
                 let ManagerStatus::ManagerError(store, _) = self.manager_status.clone() else {
@@ -89,24 +112,42 @@ impl App {
                 };
 
                 return Task::batch([
-                    Task::perform(non_send_fut(|| load_manager), Message::ManagerStatus),
+                    Task::perform(non_send_fut(|| load_manager), Message::LoadManager),
                     Task::perform(rx, |url| Message::QrCode(url.unwrap().to_string())),
                 ]);
             }
-            Message::QrCode(url) => self.qr_code = Some(qr_code::Data::new(url).unwrap()),
+            Message::QrCode(url) => {
+                self.qr_code = Some(qr_code::Data::new(url).unwrap());
+                return Dialog::new(
+                    "Link your device",
+                    "You can scan the QR code below to link your device.",
+                    Action::None,
+                )
+                .into();
+            }
+            Message::OpenDialog(dialog) => self.dialog = dialog,
+            Message::CloseDialog => self.dialog.close(),
         }
 
         Task::none()
     }
 
     pub fn view(&self) -> Element<'_, Message> {
-        if let ManagerStatus::Loaded(_) = self.manager_status {
+        let base: Element<'_, Message> = if let ManagerStatus::Loaded(_) = self.manager_status {
             "registered".into()
-        } else if let Some(url) = &self.qr_code {
-            qr_code(url).into()
         } else {
-            button("link").on_press(Message::LinkSecondary).into()
-        }
+            "not registered".into()
+        };
+
+        let dialog: iced_dialog::Dialog<'_, Message> = self
+            .dialog
+            .as_iced_dialog(
+                container(base).width(Fill).height(Fill),
+                self.qr_code.as_ref(),
+            )
+            .height(320);
+
+        dialog.into()
     }
 }
 

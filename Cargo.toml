@@ -5,12 +5,12 @@ edition = "2024"
 license = "AGPL-3.0-only"
 
 [dependencies]
-iced = { git = "https://github.com/iced-rs/iced", default-features = false, features = [
-    "qr_code",
-    "tokio",
-    "web-colors",
-    "wgpu",
-] }
+iced.git = "https://github.com/iced-rs/iced"
+iced.branch = "master"
+iced.default-features = false
+iced.features = ["qr_code", "tokio", "web-colors", "wgpu"]
+
+iced_dialog = { git = "https://github.com/pml68/iced_dialog", branch = "master" }
 presage = { git = "https://github.com/whisperfish/presage" }
 presage-store-sled = { git = "https://github.com/whisperfish/presage" }
 tokio = "1.44.2"
