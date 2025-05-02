@@ -7,7 +7,7 @@ use iced::{
     Length::Fill,
     Task,
     futures::channel::oneshot,
-    widget::{button, container, qr_code},
+    widget::{container, qr_code},
 };
 use presage::{
     libsignal_service::configuration::SignalServers,
@@ -32,10 +32,9 @@ pub enum Message {
     CloseDialog,
 }
 
-#[expect(dead_code)]
 #[derive(Clone, Debug, Default)]
 pub enum ManagerStatus {
-    Loaded(RegisteredManager),
+    Loaded(Box<RegisteredManager>),
     ManagerError(NoDebug<SledStore>, Arc<ManagerError>),
     #[default]
     Unloaded,
@@ -60,7 +59,7 @@ impl App {
             .unwrap();
 
             match RegisteredManager::load_registered(store.clone()).await {
-                Ok(manager) => ManagerStatus::Loaded(manager),
+                Ok(manager) => ManagerStatus::Loaded(Box::new(manager)),
                 Err(err) => ManagerStatus::ManagerError(store.into(), Arc::new(err)),
             }
         };
@@ -107,7 +106,7 @@ impl App {
                 )
                 .await
                 {
-                    Ok(manager) => ManagerStatus::Loaded(manager),
+                    Ok(manager) => ManagerStatus::Loaded(Box::new(manager)),
                     Err(err) => ManagerStatus::ManagerError(store.clone(), Arc::new(err)),
                 };
 

@@ -1,5 +1,5 @@
 use app::App;
-use iced::{application, Result};
+use iced::{Result, application};
 use presage as _;
 use presage_store_sled as _;
 

@@ -1,4 +1,3 @@
-allow-renamed-params-for = []
 avoid-breaking-exported-api = false
 check-private-items = true
 enforce-iter-loop-reborrow = true

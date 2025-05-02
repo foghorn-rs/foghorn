@@ -1,7 +1,7 @@
 use crate::app::Message;
 use iced::{
-    widget::{center_x, column, qr_code},
     Element, Task,
+    widget::{center_x, column, qr_code},
 };
 use iced_dialog::button;
 
@@ -59,6 +59,6 @@ impl Dialog {
 
 impl From<Dialog> for Task<Message> {
     fn from(dialog: Dialog) -> Self {
-        Task::done(Message::OpenDialog(dialog))
+        Self::done(Message::OpenDialog(dialog))
     }
 }
