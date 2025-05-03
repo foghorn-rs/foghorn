@@ -75,11 +75,12 @@ impl App {
             Message::LoadManager(manager_status) => {
                 self.manager_status = manager_status.clone();
                 self.qr_code = None;
-                self.dialog.close();
 
                 if let ManagerStatus::ManagerError(_, error) = manager_status {
                     return match error.as_ref() {
-                        &presage::Error::NotYetRegisteredError => {
+                        &presage::Error::NotYetRegisteredError
+                        | &presage::Error::NoProvisioningMessageReceived
+                        | &presage::Error::ProvisioningError(presage::libsignal_service::provisioning::ProvisioningError::MissingMessage) => {
                             Task::done(Message::LinkSecondary)
                         }
                         err => Dialog::new(
@@ -90,6 +91,8 @@ impl App {
                         .into(),
                     };
                 }
+
+                self.dialog.close();
             }
             Message::LinkSecondary => {
                 let ManagerStatus::ManagerError(store, _) = self.manager_status.clone() else {
