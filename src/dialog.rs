@@ -1,11 +1,11 @@
 use crate::app::Message;
 use iced::{
-    Element, Task,
+    Element,
     widget::{center_x, column, qr_code},
 };
 use iced_dialog::button;
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Clone, Copy, Debug, Default)]
 pub enum Action {
     #[default]
     None,
@@ -21,7 +21,7 @@ impl From<Action> for Vec<Element<'_, Message>> {
     }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct Dialog {
     is_open: bool,
     title: &'static str,
@@ -54,11 +54,5 @@ impl Dialog {
 
         iced_dialog::Dialog::with_buttons(self.is_open, base, content, self.action.into())
             .title(self.title)
-    }
-}
-
-impl From<Dialog> for Task<Message> {
-    fn from(dialog: Dialog) -> Self {
-        Self::done(Message::OpenDialog(dialog))
     }
 }

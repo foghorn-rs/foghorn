@@ -10,7 +10,7 @@ use iced::{
     widget::{container, qr_code},
 };
 use presage::{
-    libsignal_service::configuration::SignalServers,
+    libsignal_service::{configuration::SignalServers, provisioning::ProvisioningError},
     manager::{Linking, Registered},
     model::identity::OnNewIdentity,
     store::Store,
@@ -73,33 +73,33 @@ impl App {
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::LoadManager(manager_status) => {
-                self.manager_status = manager_status.clone();
+                self.manager_status = manager_status;
                 self.qr_code = None;
 
-                if let ManagerStatus::ManagerError(_, error) = manager_status {
-                    return match error.as_ref() {
-                        &presage::Error::NotYetRegisteredError
-                        | &presage::Error::NoProvisioningMessageReceived
-                        | &presage::Error::ProvisioningError(presage::libsignal_service::provisioning::ProvisioningError::MissingMessage) => {
-                            Task::done(Message::LinkSecondary)
+                if let ManagerStatus::ManagerError(_, error) = &self.manager_status {
+                    return self.update(match &**error {
+                        &ManagerError::NotYetRegisteredError
+                        | &ManagerError::NoProvisioningMessageReceived
+                        | &ManagerError::ProvisioningError(ProvisioningError::MissingMessage) => {
+                            Message::LinkSecondary
                         }
-                        err => Dialog::new(
+                        err => Message::OpenDialog(Dialog::new(
                             "Oops! Something went wrong.",
                             err.to_string(),
                             Action::Close,
-                        )
-                        .into(),
-                    };
+                        )),
+                    });
                 }
 
                 self.dialog.close();
             }
             Message::LinkSecondary => {
-                let ManagerStatus::ManagerError(store, _) = self.manager_status.clone() else {
+                let ManagerStatus::ManagerError(store, _) = &self.manager_status else {
                     panic!()
                 };
 
                 let (tx, rx) = oneshot::channel();
+                let store = store.clone();
 
                 let load_manager = async move || match LinkingManager::link_secondary_device(
                     store.clone().0,
@@ -110,7 +110,7 @@ impl App {
                 .await
                 {
                     Ok(manager) => ManagerStatus::Loaded(Box::new(manager)),
-                    Err(err) => ManagerStatus::ManagerError(store.clone(), Arc::new(err)),
+                    Err(err) => ManagerStatus::ManagerError(store, Arc::new(err)),
                 };
 
                 return Task::batch([
@@ -120,12 +120,11 @@ impl App {
             }
             Message::QrCode(url) => {
                 self.qr_code = Some(qr_code::Data::new(url).unwrap());
-                return Dialog::new(
+                return self.update(Message::OpenDialog(Dialog::new(
                     "Link your device",
-                    "You can scan the QR code below to link your device.",
+                    "Scan the QR code below to link your device.",
                     Action::None,
-                )
-                .into();
+                )));
             }
             Message::OpenDialog(dialog) => self.dialog = dialog,
             Message::CloseDialog => self.dialog.close(),
