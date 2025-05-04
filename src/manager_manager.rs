@@ -1,11 +1,11 @@
 use iced::futures::{
-    SinkExt as _, StreamExt as _,
+    SinkExt as _, Stream, StreamExt as _,
     channel::{mpsc, oneshot},
 };
 use presage::{
     libsignal_service::configuration::SignalServers,
     manager::{Linking, Registered},
-    model::identity::OnNewIdentity,
+    model::{identity::OnNewIdentity, messages::Received},
     store::Store,
 };
 use presage_store_sled::{MigrationConflictStrategy, SledStore};
@@ -23,6 +23,7 @@ enum Message {
     RegisteredManager(RegisteredManager),
     LoadRegistered(oneshot::Sender<ManagerError>),
     LinkSecondary(oneshot::Sender<ManagerError>, oneshot::Sender<String>),
+    StreamMessages(mpsc::Sender<Received>),
     Shutdown,
 }
 
@@ -85,6 +86,14 @@ impl ManagerManager {
 
         rx.await.ok()
     }
+
+    pub async fn stream_mesages(mut self) -> impl Stream<Item = Received> {
+        let (tx, rx) = mpsc::channel(100);
+
+        self.sender.send(Message::StreamMessages(tx)).await.unwrap();
+
+        rx
+    }
 }
 
 async fn manager_manager(
@@ -99,12 +108,10 @@ async fn manager_manager(
     .await
     .unwrap();
 
-    #[expect(unused_variables, clippy::collection_is_never_read)]
     let mut manager = None;
 
     while let Some(message) = receiver.next().await {
         match message {
-            #[expect(unused_assignments)]
             Message::RegisteredManager(ok) => manager = Some(ok),
             Message::LoadRegistered(c) => {
                 let store = store.clone();
@@ -142,6 +149,16 @@ async fn manager_manager(
                 });
 
                 task::spawn_local(async { url.send(rx.await.unwrap().to_string()) });
+            }
+            Message::StreamMessages(mut c) => {
+                let mut manager = manager.clone().unwrap();
+                task::spawn_local(async move {
+                    let mut stream = manager.receive_messages().await.unwrap().boxed_local();
+
+                    while let Some(next) = stream.next().await {
+                        c.send(next).await.unwrap();
+                    }
+                });
             }
             Message::Shutdown => return,
         }

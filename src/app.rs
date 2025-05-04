@@ -9,7 +9,7 @@ use iced::{
     futures::channel::oneshot,
     widget::{container, qr_code},
 };
-use presage::libsignal_service::provisioning::ProvisioningError;
+use presage::{libsignal_service::provisioning::ProvisioningError, model::messages::Received};
 use std::sync::Arc;
 
 #[derive(Clone, Debug)]
@@ -19,6 +19,7 @@ pub enum Message {
     LinkSecondary,
     OpenDialog(Dialog),
     CloseDialog,
+    Received(Arc<Received>),
 }
 
 pub struct App {
@@ -51,7 +52,6 @@ impl App {
             Message::ManagerError(manager_error) => {
                 self.manager_error = manager_error;
                 self.qr_code = None;
-                self.registered = self.manager_error.is_none();
 
                 if let Some(error) = &self.manager_error {
                     return self.update(match &**error {
@@ -68,7 +68,12 @@ impl App {
                     });
                 }
 
+                self.registered = true;
                 self.dialog.close();
+
+                return Task::future(self.manager_manager.clone().stream_mesages())
+                    .then(Task::stream)
+                    .map(|r| Message::Received(Arc::new(r)));
             }
             Message::LinkSecondary => {
                 let (tx, rx) = oneshot::channel();
@@ -90,6 +95,10 @@ impl App {
             }
             Message::OpenDialog(dialog) => self.dialog = dialog,
             Message::CloseDialog => self.dialog.close(),
+            #[expect(clippy::dbg_macro)]
+            Message::Received(received) => {
+                dbg!(received);
+            }
         }
 
         Task::none()
