@@ -1,6 +1,6 @@
 use crate::{
     dialog::{Action, Dialog},
-    no_debug::NoDebug,
+    manager_manager::{ManagerError, ManagerManager},
 };
 use iced::{
     Element,
@@ -9,74 +9,51 @@ use iced::{
     futures::channel::oneshot,
     widget::{container, qr_code},
 };
-use presage::{
-    libsignal_service::{configuration::SignalServers, provisioning::ProvisioningError},
-    manager::{Linking, Registered},
-    model::identity::OnNewIdentity,
-    store::Store,
-};
-use presage_store_sled::{MigrationConflictStrategy, SledStore};
+use presage::libsignal_service::provisioning::ProvisioningError;
 use std::sync::Arc;
-use tokio::{runtime::Runtime, task::spawn_blocking};
-
-type RegisteredManager = presage::Manager<SledStore, Registered>;
-type LinkingManager = presage::Manager<SledStore, Linking>;
-type ManagerError = presage::Error<<SledStore as Store>::Error>;
 
 #[derive(Clone, Debug)]
 pub enum Message {
-    LoadManager(ManagerStatus),
-    LinkSecondary,
+    ManagerError(Option<Arc<ManagerError>>),
     QrCode(String),
+    LinkSecondary,
     OpenDialog(Dialog),
     CloseDialog,
 }
 
-#[derive(Clone, Debug, Default)]
-pub enum ManagerStatus {
-    Loaded(Box<RegisteredManager>),
-    ManagerError(NoDebug<SledStore>, Arc<ManagerError>),
-    #[default]
-    Unloaded,
-}
-
-#[derive(Default)]
 pub struct App {
-    manager_status: ManagerStatus,
+    manager_manager: ManagerManager,
+    manager_error: Option<Arc<ManagerError>>,
+    registered: bool,
     qr_code: Option<qr_code::Data>,
     dialog: Dialog,
 }
 
 impl App {
     pub fn create() -> (Self, Task<Message>) {
-        let load_manager = async || {
-            let store = SledStore::open(
-                "",
-                MigrationConflictStrategy::BackupAndDrop,
-                OnNewIdentity::Trust,
-            )
-            .await
-            .unwrap();
-
-            match RegisteredManager::load_registered(store.clone()).await {
-                Ok(manager) => ManagerStatus::Loaded(Box::new(manager)),
-                Err(err) => ManagerStatus::ManagerError(store.into(), Arc::new(err)),
-            }
-        };
+        let manager_manager = ManagerManager::default();
+        let register = manager_manager.clone().load_registered();
 
         (
-            Self::default(),
-            Task::perform(non_send_fut(move || load_manager), Message::LoadManager),
+            Self {
+                manager_manager,
+                manager_error: None,
+                registered: false,
+                qr_code: None,
+                dialog: Dialog::default(),
+            },
+            Task::perform(register, |err| Message::ManagerError(err.map(Arc::new))),
         )
     }
 
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
-            Message::LoadManager(manager_status) => {
-                self.manager_status = manager_status;
+            Message::ManagerError(manager_error) => {
+                self.manager_error = manager_error;
                 self.qr_code = None;
+                self.registered = self.manager_error.is_none();
 
-                if let ManagerStatus::ManagerError(_, error) = &self.manager_status {
+                if let Some(error) = &self.manager_error {
                     return self.update(match &**error {
                         &ManagerError::NotYetRegisteredError
                         | &ManagerError::NoProvisioningMessageReceived
@@ -94,28 +71,13 @@ impl App {
                 self.dialog.close();
             }
             Message::LinkSecondary => {
-                let ManagerStatus::ManagerError(store, _) = &self.manager_status else {
-                    panic!()
-                };
-
                 let (tx, rx) = oneshot::channel();
-                let store = store.clone();
-
-                let load_manager = async move || match LinkingManager::link_secondary_device(
-                    store.clone().0,
-                    SignalServers::Production,
-                    "foghorn".to_owned(),
-                    tx,
-                )
-                .await
-                {
-                    Ok(manager) => ManagerStatus::Loaded(Box::new(manager)),
-                    Err(err) => ManagerStatus::ManagerError(store, Arc::new(err)),
-                };
 
                 return Task::batch([
-                    Task::perform(non_send_fut(|| load_manager), Message::LoadManager),
-                    Task::perform(rx, |url| Message::QrCode(url.unwrap().to_string())),
+                    Task::perform(self.manager_manager.clone().link_secondary(tx), |err| {
+                        Message::ManagerError(err.map(Arc::new))
+                    }),
+                    Task::perform(rx, |url| Message::QrCode(url.unwrap())),
                 ]);
             }
             Message::QrCode(url) => {
@@ -134,7 +96,7 @@ impl App {
     }
 
     pub fn view(&self) -> Element<'_, Message> {
-        let base: Element<'_, Message> = if let ManagerStatus::Loaded(_) = self.manager_status {
+        let base: Element<'_, Message> = if self.registered {
             "registered".into()
         } else {
             "not registered".into()
@@ -150,12 +112,4 @@ impl App {
 
         dialog.into()
     }
-}
-
-async fn non_send_fut<F: AsyncFnOnce() -> R, R: Send + 'static>(
-    f: impl FnOnce() -> F + Send + 'static,
-) -> R {
-    spawn_blocking(|| Runtime::new().unwrap().block_on(f()()))
-        .await
-        .unwrap()
 }

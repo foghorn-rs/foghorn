@@ -5,7 +5,7 @@ use presage_store_sled as _;
 
 mod app;
 mod dialog;
-mod no_debug;
+mod manager_manager;
 
 fn main() -> Result {
     application(App::create, App::update, App::view)
