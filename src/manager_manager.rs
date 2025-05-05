@@ -5,10 +5,10 @@ use iced::futures::{
     channel::{mpsc, oneshot},
 };
 use presage::{
-    libsignal_service::configuration::SignalServers,
+    libsignal_service::{configuration::SignalServers, prelude::Content},
     manager::{Linking, Registered},
     model::{identity::OnNewIdentity, messages::Received},
-    store::Store,
+    store::{ContentsStore as _, Store, Thread},
 };
 use presage_store_sled::{MigrationConflictStrategy, SledStore};
 use std::sync::Arc;
@@ -24,7 +24,7 @@ pub type ManagerError = presage::Error<<SledStore as Store>::Error>;
 enum Message {
     LoadRegistered(oneshot::Sender<ManagerError>),
     LinkSecondary(oneshot::Sender<ManagerError>, oneshot::Sender<String>),
-    StreamMessages(mpsc::Sender<Received>),
+    StreamMessages(mpsc::Sender<Content>),
     Shutdown,
 }
 
@@ -83,7 +83,7 @@ impl ManagerManager {
         rx.await.ok()
     }
 
-    pub async fn stream_mesages(mut self) -> impl Stream<Item = Received> {
+    pub async fn stream_mesages(mut self) -> impl Stream<Item = Content> {
         let (tx, rx) = mpsc::channel(100);
 
         self.sender.send(Message::StreamMessages(tx)).await.unwrap();
@@ -138,6 +138,7 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Message>) {
                 task::spawn_local(async { url.send(rx.await.unwrap().to_string()) });
             }
             Message::StreamMessages(mut c) => {
+                let store = store.clone();
                 let manager = manager.clone();
                 let who_am_i = who_am_i.clone();
                 task::spawn_local(async move {
@@ -146,6 +147,34 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Message>) {
                             retry_fib(async || manager.wait().await.whoami().await.ok()).await
                         })
                         .await;
+
+                    for thread in store
+                        .contacts()
+                        .await
+                        .into_iter()
+                        .flatten()
+                        .flatten()
+                        .map(|c| Thread::Contact(c.uuid))
+                        .chain(
+                            store
+                                .groups()
+                                .await
+                                .into_iter()
+                                .flatten()
+                                .flatten()
+                                .map(|g| Thread::Group(g.0)),
+                        )
+                    {
+                        for message in store
+                            .messages(&thread, ..)
+                            .await
+                            .into_iter()
+                            .flatten()
+                            .flatten()
+                        {
+                            c.send(message).await.unwrap();
+                        }
+                    }
 
                     let mut stream = manager
                         .wait()
@@ -157,7 +186,9 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Message>) {
                         .boxed_local();
 
                     while let Some(next) = stream.next().await {
-                        c.send(next).await.unwrap();
+                        if let Received::Content(message) = next {
+                            c.send(*message).await.unwrap();
+                        }
                     }
                 });
             }

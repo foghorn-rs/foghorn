@@ -9,7 +9,7 @@ use iced::{
     futures::channel::oneshot,
     widget::{container, qr_code},
 };
-use presage::{libsignal_service::provisioning::ProvisioningError, model::messages::Received};
+use presage::libsignal_service::{prelude::Content, provisioning::ProvisioningError};
 use std::sync::Arc;
 
 #[derive(Clone, Debug)]
@@ -19,7 +19,7 @@ pub enum Message {
     LinkSecondary,
     OpenDialog(Dialog),
     CloseDialog,
-    Received(Arc<Received>),
+    Received(Arc<Content>),
 }
 
 pub struct App {
