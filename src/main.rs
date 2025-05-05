@@ -4,6 +4,7 @@ use presage as _;
 use presage_store_sled as _;
 
 mod app;
+mod backoff;
 mod dialog;
 mod manager_manager;
 

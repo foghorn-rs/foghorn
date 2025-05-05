@@ -1,9 +1,10 @@
+use crate::backoff::retry_fib;
 use iced::futures::{
     SinkExt as _, Stream, StreamExt as _,
     channel::{mpsc, oneshot},
 };
 use presage::{
-    libsignal_service::configuration::SignalServers,
+    libsignal_service::{configuration::SignalServers, push_service::WhoAmIResponse},
     manager::{Linking, Registered},
     model::{identity::OnNewIdentity, messages::Received},
     store::Store,
@@ -21,6 +22,7 @@ pub type ManagerError = presage::Error<<SledStore as Store>::Error>;
 
 enum Message {
     RegisteredManager(RegisteredManager),
+    WhoAmIResponse(WhoAmIResponse),
     LoadRegistered(oneshot::Sender<ManagerError>),
     LinkSecondary(oneshot::Sender<ManagerError>, oneshot::Sender<String>),
     StreamMessages(mpsc::Sender<Received>),
@@ -109,10 +111,27 @@ async fn manager_manager(
     .unwrap();
 
     let mut manager = None;
+    #[expect(unused_variables, clippy::collection_is_never_read)]
+    let mut who_am_i = None;
 
     while let Some(message) = receiver.next().await {
         match message {
-            Message::RegisteredManager(ok) => manager = Some(ok),
+            Message::RegisteredManager(ok) => {
+                manager = Some(ok);
+
+                let registered_manager = manager.clone().unwrap();
+                let mut self_sender = self_sender.clone();
+                task::spawn_local(async move {
+                    self_sender
+                        .send(Message::WhoAmIResponse(
+                            retry_fib(async || registered_manager.whoami().await.ok()).await,
+                        ))
+                        .await
+                        .unwrap();
+                });
+            }
+            #[expect(unused_assignments)]
+            Message::WhoAmIResponse(ok) => who_am_i = Some(ok),
             Message::LoadRegistered(c) => {
                 let store = store.clone();
                 let mut self_sender = self_sender.clone();
