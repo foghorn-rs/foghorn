@@ -1,10 +1,11 @@
 use crate::backoff::retry_fib;
+use async_lock::OnceCell;
 use iced::futures::{
     SinkExt as _, Stream, StreamExt as _,
     channel::{mpsc, oneshot},
 };
 use presage::{
-    libsignal_service::{configuration::SignalServers, push_service::WhoAmIResponse},
+    libsignal_service::configuration::SignalServers,
     manager::{Linking, Registered},
     model::{identity::OnNewIdentity, messages::Received},
     store::Store,
@@ -21,8 +22,6 @@ type LinkingManager = presage::Manager<SledStore, Linking>;
 pub type ManagerError = presage::Error<<SledStore as Store>::Error>;
 
 enum Message {
-    RegisteredManager(RegisteredManager),
-    WhoAmIResponse(WhoAmIResponse),
     LoadRegistered(oneshot::Sender<ManagerError>),
     LinkSecondary(oneshot::Sender<ManagerError>, oneshot::Sender<String>),
     StreamMessages(mpsc::Sender<Received>),
@@ -49,22 +48,17 @@ impl Default for ManagerManager {
     fn default() -> Self {
         let (sender, receiver) = mpsc::channel(100);
 
-        let self_sender = sender.clone();
         std::thread::spawn(move || {
             Builder::new_current_thread()
                 .enable_all()
                 .build()
                 .unwrap()
-                .block_on(LocalSet::new().run_until(manager_manager(self_sender, receiver)));
-        });
-
-        let shutdown = Arc::new(Shutdown {
-            sender: sender.clone(),
+                .block_on(LocalSet::new().run_until(manager_manager(receiver)));
         });
 
         Self {
-            sender,
-            _shutdown: shutdown,
+            sender: sender.clone(),
+            _shutdown: Arc::new(Shutdown { sender }),
         }
     }
 }
@@ -98,10 +92,7 @@ impl ManagerManager {
     }
 }
 
-async fn manager_manager(
-    self_sender: mpsc::Sender<Message>,
-    mut receiver: mpsc::Receiver<Message>,
-) {
+async fn manager_manager(mut receiver: mpsc::Receiver<Message>) {
     let store = SledStore::open(
         "",
         MigrationConflictStrategy::BackupAndDrop,
@@ -110,37 +101,17 @@ async fn manager_manager(
     .await
     .unwrap();
 
-    let mut manager = None;
-    #[expect(unused_variables, clippy::collection_is_never_read)]
-    let mut who_am_i = None;
+    let manager = Arc::new(OnceCell::new());
+    let who_am_i = Arc::new(OnceCell::new());
 
     while let Some(message) = receiver.next().await {
         match message {
-            Message::RegisteredManager(ok) => {
-                manager = Some(ok);
-
-                let registered_manager = manager.clone().unwrap();
-                let mut self_sender = self_sender.clone();
-                task::spawn_local(async move {
-                    self_sender
-                        .send(Message::WhoAmIResponse(
-                            retry_fib(async || registered_manager.whoami().await.ok()).await,
-                        ))
-                        .await
-                        .unwrap();
-                });
-            }
-            #[expect(unused_assignments)]
-            Message::WhoAmIResponse(ok) => who_am_i = Some(ok),
             Message::LoadRegistered(c) => {
                 let store = store.clone();
-                let mut self_sender = self_sender.clone();
+                let manager = manager.clone();
                 task::spawn_local(async move {
                     match RegisteredManager::load_registered(store).await {
-                        Ok(ok) => self_sender
-                            .send(Message::RegisteredManager(ok))
-                            .await
-                            .unwrap(),
+                        Ok(ok) => _ = manager.set(ok).await,
                         Err(err) => c.send(err).unwrap(),
                     }
                 });
@@ -149,7 +120,7 @@ async fn manager_manager(
                 let (tx, rx) = oneshot::channel();
 
                 let store = store.clone();
-                let mut self_sender = self_sender.clone();
+                let manager = manager.clone();
                 task::spawn_local(async move {
                     match LinkingManager::link_secondary_device(
                         store,
@@ -159,10 +130,7 @@ async fn manager_manager(
                     )
                     .await
                     {
-                        Ok(ok) => self_sender
-                            .send(Message::RegisteredManager(ok))
-                            .await
-                            .unwrap(),
+                        Ok(ok) => _ = manager.set(ok).await,
                         Err(err) => c.send(err).unwrap(),
                     }
                 });
@@ -170,9 +138,23 @@ async fn manager_manager(
                 task::spawn_local(async { url.send(rx.await.unwrap().to_string()) });
             }
             Message::StreamMessages(mut c) => {
-                let mut manager = manager.clone().unwrap();
+                let manager = manager.clone();
+                let who_am_i = who_am_i.clone();
                 task::spawn_local(async move {
-                    let mut stream = manager.receive_messages().await.unwrap().boxed_local();
+                    _ = who_am_i
+                        .get_or_init(async || {
+                            retry_fib(async || manager.wait().await.whoami().await.ok()).await
+                        })
+                        .await;
+
+                    let mut stream = manager
+                        .wait()
+                        .await
+                        .clone()
+                        .receive_messages()
+                        .await
+                        .unwrap()
+                        .boxed_local();
 
                     while let Some(next) = stream.next().await {
                         c.send(next).await.unwrap();

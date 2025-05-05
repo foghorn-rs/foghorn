@@ -5,6 +5,7 @@ edition = "2024"
 license = "AGPL-3.0-only"
 
 [dependencies]
+async-lock = "3.4.0"
 iced.branch = "master"
 iced.default-features = false
 iced.features = ["qr_code", "tokio", "web-colors", "wgpu"]

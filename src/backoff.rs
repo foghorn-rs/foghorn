@@ -10,6 +10,6 @@ pub async fn retry_fib<T>(mut f: impl AsyncFnMut() -> Option<T>) -> T {
 
         tokio::time::sleep(Duration::from_millis(b)).await;
 
-        (a, b) = (b, a + b);
+        (a, b) = (b, 1_000_000.min(a + b));
     }
 }
