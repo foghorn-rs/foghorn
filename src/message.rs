@@ -5,7 +5,6 @@ use presage::{
         Profile,
         content::{ContentBody, Metadata},
         prelude::{Content, ProfileKey, Uuid},
-        push_service::WhoAmIResponse,
         zkgroup::{GROUP_MASTER_KEY_LEN, GroupMasterKeyBytes, PROFILE_KEY_LEN},
     },
     proto::{AttachmentPointer, DataMessage, GroupContextV2, SyncMessage, sync_message::Sent},
@@ -49,7 +48,6 @@ impl Hash for Contact {
 #[derive(Clone, Debug)]
 pub struct Group {
     pub key: GroupMasterKeyBytes,
-    pub revision: u32,
     pub title: String,
     pub avatar: Option<image::Handle>,
     pub members: Vec<Contact>,
@@ -90,7 +88,6 @@ pub async fn decode_content(
     content: Content,
     manager: &mut RegisteredManager,
     store: &mut SledStore,
-    who_am_i: &WhoAmIResponse,
     chats: &RefCell<HashMap<Thread, Chat>>,
 ) -> Option<(Chat, Message)> {
     match (content.metadata, content.body) {
@@ -133,9 +130,11 @@ pub async fn decode_content(
 
                 let mut key = [0; GROUP_MASTER_KEY_LEN];
                 key.copy_from_slice(master_key.get(..GROUP_MASTER_KEY_LEN)?);
+                let chat = Thread::Group(key);
+
                 let group = store.group(key).await.ok()??;
 
-                if group.revision != revision || !chats.borrow().contains_key(&Thread::Group(key)) {
+                if group.revision != revision || !chats.borrow().contains_key(&chat) {
                     let mut members = Vec::new();
                     for member in &group.members {
                         let contact =
@@ -158,10 +157,9 @@ pub async fn decode_content(
                     let avatar = get_group_avatar_cached(key, revision, manager, store).await;
 
                     chats.borrow_mut().insert(
-                        Thread::Group(key),
+                        chat.clone(),
                         Chat::Group(Group {
                             key,
-                            revision,
                             title: group.title,
                             avatar: avatar.map(image::Handle::from_bytes),
                             members,
@@ -169,15 +167,16 @@ pub async fn decode_content(
                     );
                 }
 
-                Thread::Group(key)
+                chat
             } else {
-                let uuid = if [who_am_i.aci, who_am_i.pni].contains(&sender.raw_uuid()) {
+                let uuid = if sender.raw_uuid() == manager.registration_data().service_ids.aci {
                     destination.raw_uuid()
                 } else {
                     sender.raw_uuid()
                 };
+                let chat = Thread::Contact(uuid);
 
-                if !chats.borrow().contains_key(&Thread::Contact(uuid)) {
+                if !chats.borrow().contains_key(&chat) {
                     let mut bytes = [0; PROFILE_KEY_LEN];
                     bytes.copy_from_slice(profile_key?.get(..PROFILE_KEY_LEN)?);
 
@@ -186,12 +185,11 @@ pub async fn decode_content(
 
                     chats
                         .borrow_mut()
-                        .insert(Thread::Contact(uuid), Chat::Contact(contact));
+                        .insert(chat.clone(), Chat::Contact(contact));
                 }
 
-                Thread::Contact(uuid)
+                chat
             };
-
             let chat = chats.borrow()[&chat].clone();
 
             let Chat::Contact(sender) = &chats.borrow()[&Thread::Contact(sender.raw_uuid())] else {

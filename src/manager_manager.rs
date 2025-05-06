@@ -1,7 +1,4 @@
-use crate::{
-    backoff::retry_fib,
-    message::{Chat, Message, decode_content},
-};
+use crate::message::{Chat, Message, decode_content};
 use iced::futures::{
     SinkExt as _, Stream, StreamExt as _,
     channel::{mpsc, oneshot},
@@ -142,7 +139,6 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Event>) {
                 let store = store.clone();
                 let manager = manager.borrow().clone().unwrap();
                 task::spawn_local(async move {
-                    let who_am_i = Rc::new(retry_fib(async || manager.whoami().await.ok()).await);
                     let chats = Rc::new(RefCell::new(HashMap::new()));
 
                     for thread in store
@@ -171,18 +167,11 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Event>) {
                         {
                             let mut store = store.clone();
                             let mut manager = manager.clone();
-                            let who_am_i = who_am_i.clone();
                             let chats = chats.clone();
                             let mut c = c.clone();
                             task::spawn_local(async move {
-                                if let Some(message) = decode_content(
-                                    message,
-                                    &mut manager,
-                                    &mut store,
-                                    &who_am_i,
-                                    &chats,
-                                )
-                                .await
+                                if let Some(message) =
+                                    decode_content(message, &mut manager, &mut store, &chats).await
                                 {
                                     c.send(message).await.unwrap();
                                 }
@@ -201,18 +190,11 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Event>) {
                         if let Received::Content(message) = next {
                             let mut store = store.clone();
                             let mut manager = manager.clone();
-                            let who_am_i = who_am_i.clone();
                             let chats = chats.clone();
                             let mut c = c.clone();
                             task::spawn_local(async move {
-                                if let Some(message) = decode_content(
-                                    *message,
-                                    &mut manager,
-                                    &mut store,
-                                    &who_am_i,
-                                    &chats,
-                                )
-                                .await
+                                if let Some(message) =
+                                    decode_content(*message, &mut manager, &mut store, &chats).await
                                 {
                                     c.send(message).await.unwrap();
                                 }
