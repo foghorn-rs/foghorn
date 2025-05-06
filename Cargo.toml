@@ -10,7 +10,6 @@ iced.default-features = false
 iced.features = ["image", "qr_code", "tokio", "web-colors", "wgpu"]
 iced.git = "https://github.com/iced-rs/iced"
 
-async-lock = "3.4.0"
 iced_dialog = { git = "https://github.com/pml68/iced_dialog", branch = "master" }
 presage = { git = "https://github.com/whisperfish/presage" }
 presage-store-sled = { git = "https://github.com/whisperfish/presage" }

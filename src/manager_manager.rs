@@ -2,7 +2,6 @@ use crate::{
     backoff::retry_fib,
     message::{Chat, Message, decode_content},
 };
-use async_lock::OnceCell;
 use iced::futures::{
     SinkExt as _, Stream, StreamExt as _,
     channel::{mpsc, oneshot},
@@ -105,7 +104,6 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Event>) {
     .unwrap();
 
     let manager = Rc::new(RefCell::new(None));
-    let who_am_i = Rc::new(OnceCell::new());
 
     while let Some(message) = receiver.next().await {
         match message {
@@ -143,12 +141,8 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Event>) {
             Event::StreamMessages(c) => {
                 let store = store.clone();
                 let manager = manager.borrow().clone().unwrap();
-                let who_am_i = who_am_i.clone();
                 task::spawn_local(async move {
-                    who_am_i
-                        .get_or_init(async || retry_fib(async || manager.whoami().await.ok()).await)
-                        .await;
-
+                    let who_am_i = Rc::new(retry_fib(async || manager.whoami().await.ok()).await);
                     let chats = Rc::new(RefCell::new(HashMap::new()));
 
                     for thread in store
@@ -185,7 +179,7 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Event>) {
                                     message,
                                     &mut manager,
                                     &mut store,
-                                    who_am_i.wait().await,
+                                    &who_am_i,
                                     &chats,
                                 )
                                 .await
@@ -215,7 +209,7 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Event>) {
                                     *message,
                                     &mut manager,
                                     &mut store,
-                                    who_am_i.wait().await,
+                                    &who_am_i,
                                     &chats,
                                 )
                                 .await
