@@ -1,46 +1,49 @@
-use crate::backoff::retry_fib;
+use crate::{
+    backoff::retry_fib,
+    message::{Chat, Message, decode_content},
+};
 use async_lock::OnceCell;
 use iced::futures::{
     SinkExt as _, Stream, StreamExt as _,
     channel::{mpsc, oneshot},
 };
 use presage::{
-    libsignal_service::{configuration::SignalServers, prelude::Content},
+    libsignal_service::configuration::SignalServers,
     manager::{Linking, Registered},
     model::{identity::OnNewIdentity, messages::Received},
     store::{ContentsStore as _, Store, Thread},
 };
 use presage_store_sled::{MigrationConflictStrategy, SledStore};
-use std::sync::Arc;
+use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Arc};
 use tokio::{
     runtime::Builder,
     task::{self, LocalSet},
 };
 
-type RegisteredManager = presage::Manager<SledStore, Registered>;
-type LinkingManager = presage::Manager<SledStore, Linking>;
+pub type RegisteredManager = presage::Manager<SledStore, Registered>;
+pub type LinkingManager = presage::Manager<SledStore, Linking>;
 pub type ManagerError = presage::Error<<SledStore as Store>::Error>;
 
-enum Message {
+enum Event {
     LoadRegistered(oneshot::Sender<ManagerError>),
     LinkSecondary(oneshot::Sender<ManagerError>, oneshot::Sender<String>),
-    StreamMessages(mpsc::Sender<Content>),
+    StreamMessages(mpsc::Sender<(Chat, Message)>),
     Shutdown,
 }
 
 #[derive(Clone)]
 pub struct ManagerManager {
-    sender: mpsc::Sender<Message>,
+    sender: mpsc::Sender<Event>,
     _shutdown: Arc<Shutdown>,
 }
 
-pub struct Shutdown {
-    sender: mpsc::Sender<Message>,
+struct Shutdown {
+    sender: mpsc::Sender<Event>,
 }
 
 impl Drop for Shutdown {
     fn drop(&mut self) {
-        while self.sender.try_send(Message::Shutdown).is_err() {}
+        while self.sender.try_send(Event::Shutdown).is_err() {}
     }
 }
 
@@ -67,7 +70,7 @@ impl ManagerManager {
     pub async fn load_registered(mut self) -> Option<ManagerError> {
         let (tx, rx) = oneshot::channel();
 
-        self.sender.send(Message::LoadRegistered(tx)).await.unwrap();
+        self.sender.send(Event::LoadRegistered(tx)).await.unwrap();
 
         rx.await.ok()
     }
@@ -76,23 +79,23 @@ impl ManagerManager {
         let (tx, rx) = oneshot::channel();
 
         self.sender
-            .send(Message::LinkSecondary(tx, url))
+            .send(Event::LinkSecondary(tx, url))
             .await
             .unwrap();
 
         rx.await.ok()
     }
 
-    pub async fn stream_mesages(mut self) -> impl Stream<Item = Content> {
+    pub async fn stream_mesages(mut self) -> impl Stream<Item = (Chat, Message)> {
         let (tx, rx) = mpsc::channel(100);
 
-        self.sender.send(Message::StreamMessages(tx)).await.unwrap();
+        self.sender.send(Event::StreamMessages(tx)).await.unwrap();
 
         rx
     }
 }
 
-async fn manager_manager(mut receiver: mpsc::Receiver<Message>) {
+async fn manager_manager(mut receiver: mpsc::Receiver<Event>) {
     let store = SledStore::open(
         "",
         MigrationConflictStrategy::BackupAndDrop,
@@ -101,22 +104,22 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Message>) {
     .await
     .unwrap();
 
-    let manager = Arc::new(OnceCell::new());
-    let who_am_i = Arc::new(OnceCell::new());
+    let manager = Rc::new(RefCell::new(None));
+    let who_am_i = Rc::new(OnceCell::new());
 
     while let Some(message) = receiver.next().await {
         match message {
-            Message::LoadRegistered(c) => {
+            Event::LoadRegistered(c) => {
                 let store = store.clone();
                 let manager = manager.clone();
                 task::spawn_local(async move {
                     match RegisteredManager::load_registered(store).await {
-                        Ok(ok) => _ = manager.set(ok).await,
+                        Ok(ok) => *manager.borrow_mut() = Some(ok),
                         Err(err) => c.send(err).unwrap(),
                     }
                 });
             }
-            Message::LinkSecondary(c, url) => {
+            Event::LinkSecondary(c, url) => {
                 let (tx, rx) = oneshot::channel();
 
                 let store = store.clone();
@@ -130,23 +133,23 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Message>) {
                     )
                     .await
                     {
-                        Ok(ok) => _ = manager.set(ok).await,
+                        Ok(ok) => *manager.borrow_mut() = Some(ok),
                         Err(err) => c.send(err).unwrap(),
                     }
                 });
 
                 task::spawn_local(async { url.send(rx.await.unwrap().to_string()) });
             }
-            Message::StreamMessages(mut c) => {
+            Event::StreamMessages(c) => {
                 let store = store.clone();
-                let manager = manager.clone();
+                let manager = manager.borrow().clone().unwrap();
                 let who_am_i = who_am_i.clone();
                 task::spawn_local(async move {
-                    _ = who_am_i
-                        .get_or_init(async || {
-                            retry_fib(async || manager.wait().await.whoami().await.ok()).await
-                        })
+                    who_am_i
+                        .get_or_init(async || retry_fib(async || manager.whoami().await.ok()).await)
                         .await;
+
+                    let chats = Rc::new(RefCell::new(HashMap::new()));
 
                     for thread in store
                         .contacts()
@@ -172,13 +175,28 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Message>) {
                             .flatten()
                             .flatten()
                         {
-                            c.send(message).await.unwrap();
+                            let mut store = store.clone();
+                            let mut manager = manager.clone();
+                            let who_am_i = who_am_i.clone();
+                            let chats = chats.clone();
+                            let mut c = c.clone();
+                            task::spawn_local(async move {
+                                if let Some(message) = decode_content(
+                                    message,
+                                    &mut manager,
+                                    &mut store,
+                                    who_am_i.wait().await,
+                                    &chats,
+                                )
+                                .await
+                                {
+                                    c.send(message).await.unwrap();
+                                }
+                            });
                         }
                     }
 
                     let mut stream = manager
-                        .wait()
-                        .await
                         .clone()
                         .receive_messages()
                         .await
@@ -187,12 +205,29 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Message>) {
 
                     while let Some(next) = stream.next().await {
                         if let Received::Content(message) = next {
-                            c.send(*message).await.unwrap();
+                            let mut store = store.clone();
+                            let mut manager = manager.clone();
+                            let who_am_i = who_am_i.clone();
+                            let chats = chats.clone();
+                            let mut c = c.clone();
+                            task::spawn_local(async move {
+                                if let Some(message) = decode_content(
+                                    *message,
+                                    &mut manager,
+                                    &mut store,
+                                    who_am_i.wait().await,
+                                    &chats,
+                                )
+                                .await
+                                {
+                                    c.send(message).await.unwrap();
+                                }
+                            });
                         }
                     }
                 });
             }
-            Message::Shutdown => return,
+            Event::Shutdown => return,
         }
     }
 }

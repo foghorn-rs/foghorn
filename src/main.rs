@@ -7,6 +7,7 @@ mod app;
 mod backoff;
 mod dialog;
 mod manager_manager;
+mod message;
 
 fn main() -> Result {
     application(App::create, App::update, App::view)

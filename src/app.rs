@@ -1,6 +1,7 @@
 use crate::{
     dialog::{Action, Dialog},
     manager_manager::{ManagerError, ManagerManager},
+    message,
 };
 use iced::{
     Element,
@@ -9,8 +10,8 @@ use iced::{
     futures::channel::oneshot,
     widget::{container, qr_code},
 };
-use presage::libsignal_service::{prelude::Content, provisioning::ProvisioningError};
-use std::sync::Arc;
+use presage::libsignal_service::provisioning::ProvisioningError;
+use std::{collections::HashMap, sync::Arc};
 
 #[derive(Clone, Debug)]
 pub enum Message {
@@ -19,7 +20,7 @@ pub enum Message {
     LinkSecondary,
     OpenDialog(Dialog),
     CloseDialog,
-    Received(Arc<Content>),
+    Received((message::Chat, message::Message)),
 }
 
 pub struct App {
@@ -28,6 +29,7 @@ pub struct App {
     registered: bool,
     qr_code: Option<qr_code::Data>,
     dialog: Dialog,
+    chats: HashMap<message::Chat, Vec<message::Message>>,
 }
 
 impl App {
@@ -42,6 +44,7 @@ impl App {
                 registered: false,
                 qr_code: None,
                 dialog: Dialog::default(),
+                chats: HashMap::new(),
             },
             Task::perform(register, |err| Message::ManagerError(err.map(Arc::new))),
         )
@@ -73,7 +76,7 @@ impl App {
 
                 return Task::future(self.manager_manager.clone().stream_mesages())
                     .then(Task::stream)
-                    .map(|r| Message::Received(Arc::new(r)));
+                    .map(Message::Received);
             }
             Message::LinkSecondary => {
                 let (tx, rx) = oneshot::channel();
@@ -95,9 +98,16 @@ impl App {
             }
             Message::OpenDialog(dialog) => self.dialog = dialog,
             Message::CloseDialog => self.dialog.close(),
-            #[expect(clippy::dbg_macro)]
-            Message::Received(received) => {
-                dbg!(received);
+            Message::Received((chat, message)) => {
+                self.chats
+                    .entry(chat)
+                    .and_modify(|m| {
+                        m.insert(
+                            m.partition_point(|m| m.timestamp < message.timestamp),
+                            message.clone(),
+                        );
+                    })
+                    .or_insert_with(|| vec![message]);
             }
         }
 
