@@ -51,7 +51,7 @@ pub struct Group {
     pub key: GroupMasterKeyBytes,
     pub revision: u32,
     pub title: String,
-    pub avatar: image::Handle,
+    pub avatar: Option<image::Handle>,
     pub members: Vec<Contact>,
 }
 
@@ -127,41 +127,26 @@ pub async fn decode_content(
                 ..
             }),
         ) => {
-            let chat = if let Some(GroupContextV2 {
-                master_key,
-                revision,
-                ..
-            }) = group_v2
-            {
+            let chat = if let Some(context) = group_v2 {
+                let master_key = context.master_key();
+                let revision = context.revision();
+
                 let mut key = [0; GROUP_MASTER_KEY_LEN];
-                key.copy_from_slice(master_key?.get(..GROUP_MASTER_KEY_LEN)?);
+                key.copy_from_slice(master_key.get(..GROUP_MASTER_KEY_LEN)?);
                 let group = store.group(key).await.ok()??;
-                let revision = revision?;
 
                 if group.revision != revision || !chats.borrow().contains_key(&Thread::Group(key)) {
                     let mut members = Vec::new();
                     for member in &group.members {
-                        let profile =
-                            get_profile_cached(member.uuid, member.profile_key, manager, store)
+                        let contact =
+                            get_contact_cached(member.uuid, member.profile_key, manager, store)
                                 .await?;
 
                         members.push(
                             if let Chat::Contact(contact) = chats
                                 .borrow_mut()
                                 .entry(Thread::Contact(member.uuid))
-                                .or_insert_with(|| {
-                                    Chat::Contact(Contact {
-                                        uuid: member.uuid,
-                                        name: profile
-                                            .name
-                                            .map(|name| name.given_name)
-                                            .unwrap_or_default(),
-                                        avatar: profile.avatar.map(|avatar| {
-                                            image::Handle::from_bytes(avatar.into_bytes())
-                                        }),
-                                        color: None,
-                                    })
-                                })
+                                .or_insert_with(|| Chat::Contact(contact()))
                             {
                                 contact.clone()
                             } else {
@@ -170,13 +155,15 @@ pub async fn decode_content(
                         );
                     }
 
+                    let avatar = get_group_avatar_cached(key, revision, manager, store).await;
+
                     chats.borrow_mut().insert(
                         Thread::Group(key),
                         Chat::Group(Group {
                             key,
                             revision,
                             title: group.title,
-                            avatar: image::Handle::from_bytes(group.avatar.into_bytes()),
+                            avatar: avatar.map(image::Handle::from_bytes),
                             members,
                         }),
                     );
@@ -194,18 +181,12 @@ pub async fn decode_content(
                     let mut bytes = [0; PROFILE_KEY_LEN];
                     bytes.copy_from_slice(profile_key?.get(..PROFILE_KEY_LEN)?);
 
-                    let profile =
-                        get_profile_cached(uuid, ProfileKey { bytes }, manager, store).await?;
+                    let contact =
+                        get_contact_cached(uuid, ProfileKey { bytes }, manager, store).await?();
 
-                    chats.borrow_mut().insert(
-                        Thread::Contact(uuid),
-                        Chat::Contact(Contact {
-                            uuid,
-                            name: profile.name.map(|name| name.given_name).unwrap_or_default(),
-                            avatar: profile.avatar.map(image::Handle::from_bytes),
-                            color: None,
-                        }),
-                    );
+                    chats
+                        .borrow_mut()
+                        .insert(Thread::Contact(uuid), Chat::Contact(contact));
                 }
 
                 Thread::Contact(uuid)
@@ -247,6 +228,26 @@ pub async fn decode_content(
     }
 }
 
+async fn get_contact_cached(
+    uuid: Uuid,
+    profile_key: ProfileKey,
+    manager: &mut RegisteredManager,
+    store: &mut SledStore,
+) -> Option<impl FnOnce() -> Contact> {
+    let profile = get_profile_cached(uuid, profile_key, manager, store).await?;
+    let avatar = get_profile_avatar_cached(uuid, profile_key, manager, store).await;
+
+    Some(move || Contact {
+        uuid,
+        name: profile
+            .name
+            .map(|name| name.to_string())
+            .unwrap_or_default(),
+        avatar: avatar.map(image::Handle::from_bytes),
+        color: None,
+    })
+}
+
 async fn get_profile_cached(
     uuid: Uuid,
     profile_key: ProfileKey,
@@ -267,5 +268,52 @@ async fn get_profile_cached(
             .ok()?;
 
         Some(profile)
+    }
+}
+
+async fn get_profile_avatar_cached(
+    uuid: Uuid,
+    profile_key: ProfileKey,
+    manager: &mut RegisteredManager,
+    store: &mut SledStore,
+) -> Option<Vec<u8>> {
+    if let Some(avatar) = store.profile_avatar(uuid, profile_key).await.ok()? {
+        Some(avatar)
+    } else {
+        let avatar = manager
+            .retrieve_profile_avatar_by_uuid(uuid, profile_key)
+            .await
+            .ok()??;
+
+        store
+            .save_profile_avatar(uuid, profile_key, &avatar)
+            .await
+            .ok()?;
+
+        Some(avatar)
+    }
+}
+
+async fn get_group_avatar_cached(
+    master_key: GroupMasterKeyBytes,
+    revision: u32,
+    manager: &mut RegisteredManager,
+    store: &SledStore,
+) -> Option<Vec<u8>> {
+    if let Some(avatar) = store.group_avatar(master_key).await.ok()? {
+        Some(avatar)
+    } else {
+        let avatar = manager
+            .retrieve_group_avatar(GroupContextV2 {
+                master_key: Some(master_key.into()),
+                revision: Some(revision),
+                group_change: None,
+            })
+            .await
+            .ok()??;
+
+        store.save_group_avatar(master_key, &avatar).await.ok()?;
+
+        Some(avatar)
     }
 }
