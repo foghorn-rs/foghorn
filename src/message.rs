@@ -2,6 +2,7 @@ use crate::manager_manager::RegisteredManager;
 use iced::{Color, widget::image};
 use presage::{
     libsignal_service::{
+        Profile,
         content::{ContentBody, Metadata},
         prelude::{Content, ProfileKey, Uuid},
         push_service::WhoAmIResponse,
@@ -140,10 +141,9 @@ pub async fn decode_content(
                 if group.revision != revision || !chats.borrow().contains_key(&Thread::Group(key)) {
                     let mut members = Vec::new();
                     for member in &group.members {
-                        let profile = store
-                            .profile(member.uuid, member.profile_key)
-                            .await
-                            .ok()??;
+                        let profile =
+                            get_profile_cached(member.uuid, member.profile_key, manager, store)
+                                .await?;
 
                         members.push(
                             if let Chat::Contact(contact) = chats
@@ -194,23 +194,8 @@ pub async fn decode_content(
                     let mut bytes = [0; PROFILE_KEY_LEN];
                     bytes.copy_from_slice(profile_key?.get(..PROFILE_KEY_LEN)?);
 
-                    let profile = if let Some(profile) =
-                        store.profile(uuid, ProfileKey { bytes }).await.ok()?
-                    {
-                        profile
-                    } else {
-                        let profile = manager
-                            .retrieve_profile_by_uuid(uuid, ProfileKey { bytes })
-                            .await
-                            .ok()?;
-
-                        store
-                            .save_profile(uuid, ProfileKey { bytes }, profile.clone())
-                            .await
-                            .ok()?;
-
-                        profile
-                    };
+                    let profile =
+                        get_profile_cached(uuid, ProfileKey { bytes }, manager, store).await?;
 
                     chats.borrow_mut().insert(
                         Thread::Contact(uuid),
@@ -259,5 +244,28 @@ pub async fn decode_content(
             Some((chat, message))
         }
         _ => None,
+    }
+}
+
+async fn get_profile_cached(
+    uuid: Uuid,
+    profile_key: ProfileKey,
+    manager: &mut RegisteredManager,
+    store: &mut SledStore,
+) -> Option<Profile> {
+    if let Some(profile) = store.profile(uuid, profile_key).await.ok()? {
+        Some(profile)
+    } else {
+        let profile = manager
+            .retrieve_profile_by_uuid(uuid, profile_key)
+            .await
+            .ok()?;
+
+        store
+            .save_profile(uuid, profile_key, profile.clone())
+            .await
+            .ok()?;
+
+        Some(profile)
     }
 }
