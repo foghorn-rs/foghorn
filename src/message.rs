@@ -84,6 +84,14 @@ pub struct Message {
     pub attachments: Vec<Attachment>,
     pub sticker: Option<Attachment>,
     pub sender: Contact,
+    pub quote: Option<Quote>,
+}
+
+#[derive(Clone, Debug)]
+pub struct Quote {
+    pub timestamp: u64,
+    pub body: Option<String>,
+    pub sender: Option<Contact>,
 }
 
 pub async fn decode_content(
@@ -103,10 +111,11 @@ pub async fn decode_content(
             },
             ContentBody::DataMessage(DataMessage {
                 body,
-                group_v2,
                 attachments,
-                sticker,
+                group_v2,
                 profile_key,
+                quote,
+                sticker,
                 ..
             })
             | ContentBody::SynchronizeMessage(SyncMessage {
@@ -115,10 +124,11 @@ pub async fn decode_content(
                         message:
                             Some(DataMessage {
                                 body,
-                                group_v2,
                                 attachments,
-                                sticker,
+                                group_v2,
                                 profile_key,
+                                quote,
+                                sticker,
                                 ..
                             }),
                         ..
@@ -194,6 +204,18 @@ pub async fn decode_content(
             };
             let chat = chats.borrow()[&chat].clone();
 
+            let quote_sender = if let Some(quote) = &quote {
+                let chat = Thread::Contact(quote.author_aci().parse().ok()?);
+
+                if let Some(Chat::Contact(sender)) = chats.borrow().get(&chat) {
+                    Some(sender.clone())
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
             let Chat::Contact(sender) = &chats.borrow()[&Thread::Contact(sender.raw_uuid())] else {
                 return None;
             };
@@ -219,6 +241,11 @@ pub async fn decode_content(
                         data: None,
                         image: None,
                     })
+                }),
+                quote: quote.map(|quote| Quote {
+                    timestamp: quote.id(),
+                    body: quote.text,
+                    sender: quote_sender,
                 }),
             };
 
