@@ -1,7 +1,5 @@
 use app::App;
 use iced::{Result, application};
-use presage as _;
-use presage_store_sled as _;
 
 mod app;
 mod dialog;

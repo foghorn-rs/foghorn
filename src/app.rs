@@ -1,5 +1,5 @@
 use crate::{
-    dialog::{Action, Dialog},
+    dialog::Dialog,
     manager_manager::{ManagerError, ManagerManager},
     message,
 };
@@ -18,15 +18,12 @@ pub enum Message {
     ManagerError(Option<Arc<ManagerError>>),
     QrCode(String),
     LinkSecondary,
-    OpenDialog(Dialog),
     Received((message::Chat, message::Message)),
 }
 
 pub struct App {
     manager_manager: ManagerManager,
-    manager_error: Option<Arc<ManagerError>>,
     registered: bool,
-    qr_code: Option<qr_code::Data>,
     dialog: Dialog,
     chats: HashMap<message::Chat, Vec<message::Message>>,
 }
@@ -39,9 +36,7 @@ impl App {
         (
             Self {
                 manager_manager,
-                manager_error: None,
                 registered: false,
-                qr_code: None,
                 dialog: Dialog::default(),
                 chats: HashMap::new(),
             },
@@ -52,22 +47,24 @@ impl App {
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::ManagerError(manager_error) => {
-                self.manager_error = manager_error;
-                self.qr_code = None;
-
-                if let Some(error) = &self.manager_error {
-                    return self.update(match &**error {
+                if let Some(error) = manager_error {
+                    return match &*error {
                         &ManagerError::NotYetRegisteredError
                         | &ManagerError::NoProvisioningMessageReceived
                         | &ManagerError::ProvisioningError(ProvisioningError::MissingMessage) => {
-                            Message::LinkSecondary
+                            self.update(Message::LinkSecondary)
                         }
-                        err => Message::OpenDialog(Dialog::new(
-                            "Oops! Something went wrong.",
-                            err.to_string(),
-                            Action::Close,
-                        )),
-                    });
+                        err => {
+                            self.dialog = Dialog::new(
+                                "Oops! Something went wrong.",
+                                err.to_string(),
+                                None,
+                                Some(Message::LinkSecondary),
+                            )
+                            .monospace();
+                            Task::none()
+                        }
+                    };
                 }
 
                 self.registered = true;
@@ -92,14 +89,13 @@ impl App {
                 }
             }
             Message::QrCode(url) => {
-                self.qr_code = Some(qr_code::Data::new(url).unwrap());
-                return self.update(Message::OpenDialog(Dialog::new(
+                self.dialog = Dialog::new(
                     "Link your device",
                     "Scan the QR code below to link your device.",
-                    Action::None,
-                )));
+                    Some(qr_code::Data::new(url).unwrap()),
+                    None,
+                );
             }
-            Message::OpenDialog(dialog) => self.dialog = dialog,
             Message::Received((chat, message)) => {
                 self.chats
                     .entry(chat)
@@ -125,10 +121,7 @@ impl App {
 
         let dialog: iced_dialog::Dialog<'_, Message> = self
             .dialog
-            .as_iced_dialog(
-                container(base).width(Fill).height(Fill),
-                self.qr_code.as_ref(),
-            )
+            .as_iced_dialog(container(base).width(Fill).height(Fill))
             .height(320);
 
         dialog.into()

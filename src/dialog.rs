@@ -1,42 +1,41 @@
 use crate::app::Message;
 use iced::{
-    Element,
-    widget::{center_x, column, qr_code},
+    Element, Font,
+    widget::{center_x, column, qr_code, text},
 };
 use iced_dialog::button;
+use std::borrow::Cow;
 
-#[derive(Clone, Copy, Debug, Default)]
-pub enum Action {
-    #[default]
-    None,
-    Close,
-}
-
-impl From<Action> for Vec<Element<'_, Message>> {
-    fn from(action: Action) -> Self {
-        match action {
-            Action::None => vec![],
-            Action::Close => vec![button("Close", Message::LinkSecondary).into()],
-        }
-    }
-}
-
-#[derive(Clone, Debug, Default)]
+#[derive(Debug, Default)]
 pub struct Dialog {
     is_open: bool,
-    title: &'static str,
-    content: String,
-    action: Action,
+    title: Cow<'static, str>,
+    content: Cow<'static, str>,
+    qr_code: Option<qr_code::Data>,
+    message: Option<Message>,
+    font: Font,
 }
 
 impl Dialog {
-    pub fn new(title: &'static str, content: impl Into<String>, action: Action) -> Self {
+    pub fn new(
+        title: impl Into<Cow<'static, str>>,
+        content: impl Into<Cow<'static, str>>,
+        qr_code: Option<qr_code::Data>,
+        action: Option<Message>,
+    ) -> Self {
         Self {
             is_open: true,
-            title,
+            title: title.into(),
             content: content.into(),
-            action,
+            qr_code,
+            message: action,
+            font: Font::DEFAULT,
         }
+    }
+
+    pub fn monospace(mut self) -> Self {
+        self.font = Font::MONOSPACE;
+        self
     }
 
     pub fn close(&mut self) {
@@ -46,13 +45,19 @@ impl Dialog {
     pub fn as_iced_dialog<'a>(
         &'a self,
         base: impl Into<Element<'a, Message>>,
-        qr_code_data: Option<&'a qr_code::Data>,
     ) -> iced_dialog::Dialog<'a, Message> {
-        let content = column![self.content.as_str()]
-            .push_maybe(qr_code_data.map(|data| center_x(qr_code(data))))
+        let content = column![text(&*self.content).font(self.font)]
+            .push_maybe(self.qr_code.as_ref().map(qr_code).map(center_x))
             .spacing(8);
 
-        iced_dialog::Dialog::with_buttons(self.is_open, base, content, self.action.into())
-            .title(self.title)
+        iced_dialog::Dialog::with_buttons(
+            self.is_open,
+            base,
+            content,
+            self.message
+                .clone()
+                .map_or(vec![], |m| vec![button("Close", m).into()]),
+        )
+        .title(&*self.title)
     }
 }
