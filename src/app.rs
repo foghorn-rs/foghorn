@@ -19,7 +19,6 @@ pub enum Message {
     QrCode(String),
     LinkSecondary,
     OpenDialog(Dialog),
-    CloseDialog,
     Received((message::Chat, message::Message)),
 }
 
@@ -79,14 +78,18 @@ impl App {
                     .map(Message::Received);
             }
             Message::LinkSecondary => {
-                let (tx, rx) = oneshot::channel();
+                if self.registered {
+                    self.dialog.close();
+                } else {
+                    let (tx, rx) = oneshot::channel();
 
-                return Task::batch([
-                    Task::perform(self.manager_manager.clone().link_secondary(tx), |err| {
-                        Message::ManagerError(err.map(Arc::new))
-                    }),
-                    Task::perform(rx, |url| Message::QrCode(url.unwrap())),
-                ]);
+                    return Task::batch([
+                        Task::perform(self.manager_manager.clone().link_secondary(tx), |err| {
+                            Message::ManagerError(err.map(Arc::new))
+                        }),
+                        Task::perform(rx, |url| Message::QrCode(url.unwrap())),
+                    ]);
+                }
             }
             Message::QrCode(url) => {
                 self.qr_code = Some(qr_code::Data::new(url).unwrap());
@@ -97,7 +100,6 @@ impl App {
                 )));
             }
             Message::OpenDialog(dialog) => self.dialog = dialog,
-            Message::CloseDialog => self.dialog.close(),
             Message::Received((chat, message)) => {
                 self.chats
                     .entry(chat)

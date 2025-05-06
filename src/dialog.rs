@@ -16,7 +16,7 @@ impl From<Action> for Vec<Element<'_, Message>> {
     fn from(action: Action) -> Self {
         match action {
             Action::None => vec![],
-            Action::Close => vec![button("Close", Message::CloseDialog).into()],
+            Action::Close => vec![button("Close", Message::LinkSecondary).into()],
         }
     }
 }
