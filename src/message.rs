@@ -25,7 +25,7 @@ pub enum Chat {
 
 #[derive(Clone, Debug)]
 pub struct Contact {
-    pub uuid: Uuid, // hash this only
+    pub uuid: Uuid,
     pub name: String,
     pub avatar: Option<image::Handle>,
     pub color: Option<Color>,
@@ -47,7 +47,8 @@ impl Hash for Contact {
 
 #[derive(Clone, Debug)]
 pub struct Group {
-    pub key: GroupMasterKeyBytes, // hash this only
+    pub key: GroupMasterKeyBytes,
+    pub revision: u32,
     pub title: String,
     pub avatar: image::Handle,
     pub members: Vec<Contact>,
@@ -126,15 +127,17 @@ pub async fn decode_content(
             }),
         ) => {
             let chat = if let Some(GroupContextV2 {
-                master_key: Some(master_key),
+                master_key,
+                revision,
                 ..
             }) = group_v2
             {
-                let mut bytes = [0; GROUP_MASTER_KEY_LEN];
-                bytes.copy_from_slice(master_key.get(..GROUP_MASTER_KEY_LEN)?);
-                let group = store.group(bytes).await.ok()??;
+                let mut key = [0; GROUP_MASTER_KEY_LEN];
+                key.copy_from_slice(master_key?.get(..GROUP_MASTER_KEY_LEN)?);
+                let group = store.group(key).await.ok()??;
+                let revision = revision?;
 
-                if !chats.borrow().contains_key(&Thread::Group(bytes)) {
+                if group.revision != revision || !chats.borrow().contains_key(&Thread::Group(key)) {
                     let mut members = Vec::new();
                     for member in &group.members {
                         let profile = store
@@ -168,9 +171,10 @@ pub async fn decode_content(
                     }
 
                     chats.borrow_mut().insert(
-                        Thread::Group(bytes),
+                        Thread::Group(key),
                         Chat::Group(Group {
-                            key: bytes,
+                            key,
+                            revision,
                             title: group.title,
                             avatar: image::Handle::from_bytes(group.avatar.into_bytes()),
                             members,
@@ -178,7 +182,7 @@ pub async fn decode_content(
                     );
                 }
 
-                Thread::Group(bytes)
+                Thread::Group(key)
             } else {
                 let uuid = if [who_am_i.aci, who_am_i.pni].contains(&sender.raw_uuid()) {
                     destination.raw_uuid()
