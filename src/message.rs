@@ -1,5 +1,3 @@
-#![expect(dead_code)]
-
 use crate::manager_manager::RegisteredManager;
 use iced::{Color, widget::image};
 use presage::{

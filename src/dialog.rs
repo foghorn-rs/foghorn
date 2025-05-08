@@ -6,13 +6,31 @@ use iced::{
 use iced_dialog::button;
 use std::borrow::Cow;
 
+#[derive(Clone, Copy, Debug, Default)]
+pub enum Action {
+    #[default]
+    None,
+    Close,
+    RetryLinking,
+}
+
+impl From<Action> for Vec<Element<'_, Message>> {
+    fn from(action: Action) -> Self {
+        match action {
+            Action::None => vec![],
+            Action::Close => vec![button("Close", Message::CloseDialog).into()],
+            Action::RetryLinking => vec![button("Retry Linking", Message::LinkSecondary).into()],
+        }
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct Dialog {
     is_open: bool,
     title: Cow<'static, str>,
     content: Cow<'static, str>,
     qr_code: Option<qr_code::Data>,
-    message: Option<Message>,
+    action: Action,
     font: Font,
 }
 
@@ -21,14 +39,14 @@ impl Dialog {
         title: impl Into<Cow<'static, str>>,
         content: impl Into<Cow<'static, str>>,
         qr_code: Option<qr_code::Data>,
-        action: Option<Message>,
+        action: Action,
     ) -> Self {
         Self {
             is_open: true,
             title: title.into(),
             content: content.into(),
             qr_code,
-            message: action,
+            action,
             font: Font::DEFAULT,
         }
     }
@@ -50,14 +68,7 @@ impl Dialog {
             .push_maybe(self.qr_code.as_ref().map(qr_code).map(center_x))
             .spacing(8);
 
-        iced_dialog::Dialog::with_buttons(
-            self.is_open,
-            base,
-            content,
-            self.message
-                .clone()
-                .map_or(vec![], |m| vec![button("Close", m).into()]),
-        )
-        .title(&*self.title)
+        iced_dialog::Dialog::with_buttons(self.is_open, base, content, self.action.into())
+            .title(&*self.title)
     }
 }

@@ -1,5 +1,5 @@
 use crate::{
-    dialog::Dialog,
+    dialog::{Action, Dialog},
     manager_manager::{ManagerError, ManagerManager},
     message,
 };
@@ -13,12 +13,14 @@ use iced::{
 use presage::libsignal_service::provisioning::ProvisioningError;
 use std::{collections::HashMap, sync::Arc};
 
+#[expect(clippy::large_enum_variant)]
 #[derive(Clone, Debug)]
 pub enum Message {
     ManagerError(Option<Arc<ManagerError>>),
     QrCode(String),
     LinkSecondary,
     Received((message::Chat, message::Message)),
+    CloseDialog,
 }
 
 pub struct App {
@@ -59,7 +61,7 @@ impl App {
                                 "Oops! Something went wrong.",
                                 err.to_string(),
                                 None,
-                                Some(Message::LinkSecondary),
+                                Action::RetryLinking,
                             )
                             .monospace();
                             Task::none()
@@ -93,7 +95,7 @@ impl App {
                     "Link your device",
                     "Scan the QR code below to link your device.",
                     Some(qr_code::Data::new(url).unwrap()),
-                    None,
+                    Action::None,
                 );
             }
             Message::Received((chat, message)) => {
@@ -107,6 +109,7 @@ impl App {
                     })
                     .or_insert_with(|| vec![message]);
             }
+            Message::CloseDialog => self.dialog.close(),
         }
 
         Task::none()
