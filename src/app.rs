@@ -13,7 +13,6 @@ use iced::{
 use presage::libsignal_service::provisioning::ProvisioningError;
 use std::{collections::HashMap, sync::Arc};
 
-#[expect(clippy::large_enum_variant)]
 #[derive(Clone, Debug)]
 pub enum Message {
     ManagerError(Option<Arc<ManagerError>>),

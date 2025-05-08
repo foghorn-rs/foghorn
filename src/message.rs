@@ -7,7 +7,9 @@ use presage::{
         prelude::{Content, ProfileKey, Uuid},
         zkgroup::{GROUP_MASTER_KEY_LEN, GroupMasterKeyBytes, PROFILE_KEY_LEN},
     },
-    proto::{AttachmentPointer, DataMessage, GroupContextV2, SyncMessage, sync_message::Sent},
+    proto::{
+        AttachmentPointer, BodyRange, DataMessage, GroupContextV2, SyncMessage, sync_message::Sent,
+    },
     store::{ContentsStore as _, Thread},
 };
 use presage_store_sled::SledStore;
@@ -83,6 +85,7 @@ pub struct Message {
     pub sticker: Option<Attachment>,
     pub sender: Contact,
     pub quote: Option<Quote>,
+    pub body_ranges: Vec<BodyRange>,
 }
 
 #[derive(Clone, Debug)]
@@ -90,6 +93,7 @@ pub struct Quote {
     pub timestamp: u64,
     pub body: Option<String>,
     pub sender: Option<Contact>,
+    pub body_ranges: Vec<BodyRange>,
 }
 
 pub async fn decode_content(
@@ -114,6 +118,7 @@ pub async fn decode_content(
                 profile_key,
                 quote,
                 sticker,
+                body_ranges,
                 ..
             })
             | ContentBody::SynchronizeMessage(SyncMessage {
@@ -127,6 +132,7 @@ pub async fn decode_content(
                                 profile_key,
                                 quote,
                                 sticker,
+                                body_ranges,
                                 ..
                             }),
                         ..
@@ -244,7 +250,9 @@ pub async fn decode_content(
                     timestamp: quote.id(),
                     body: quote.text,
                     sender: quote_sender,
+                    body_ranges: quote.body_ranges,
                 }),
+                body_ranges,
             };
 
             Some((chat, message))
