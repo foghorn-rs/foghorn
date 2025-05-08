@@ -9,6 +9,7 @@ mod widget;
 
 fn main() -> Result {
     application(App::create, App::update, App::view)
+        .subscription(App::subscription)
         .antialiasing(true)
         .run()
 }

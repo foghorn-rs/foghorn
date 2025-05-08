@@ -1,5 +1,6 @@
 use crate::manager_manager::RegisteredManager;
-use iced::{Color, widget::image};
+use iced::widget::image;
+use jiff::{Timestamp, Unit};
 use presage::{
     libsignal_service::{
         Profile,
@@ -19,6 +20,8 @@ use std::{
     hash::{Hash, Hasher},
 };
 
+mod view;
+
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum Chat {
     Contact(Contact),
@@ -30,7 +33,13 @@ pub struct Contact {
     pub uuid: Uuid,
     pub name: String,
     pub avatar: Option<image::Handle>,
-    pub color: Option<Color>,
+    me: Uuid,
+}
+
+impl Contact {
+    pub fn is_me(&self) -> bool {
+        self.me == self.uuid
+    }
 }
 
 impl PartialEq for Contact {
@@ -79,7 +88,7 @@ pub struct Attachment {
 
 #[derive(Clone, Debug)]
 pub struct Message {
-    pub timestamp: u64,
+    pub timestamp: Timestamp,
     pub body: Option<String>,
     pub attachments: Vec<Attachment>,
     pub sticker: Option<Attachment>,
@@ -90,7 +99,7 @@ pub struct Message {
 
 #[derive(Clone, Debug)]
 pub struct Quote {
-    pub timestamp: u64,
+    pub timestamp: Timestamp,
     pub body: Option<String>,
     pub sender: Option<Contact>,
     pub body_ranges: Vec<BodyRange>,
@@ -226,7 +235,10 @@ pub async fn decode_content(
             let sender = sender.clone();
 
             let message = Message {
-                timestamp,
+                timestamp: Timestamp::from_millisecond(timestamp as i64)
+                    .unwrap()
+                    .round(Unit::Minute)
+                    .unwrap(),
                 body,
                 attachments: attachments
                     .into_iter()
@@ -247,7 +259,10 @@ pub async fn decode_content(
                     })
                 }),
                 quote: quote.map(|quote| Quote {
-                    timestamp: quote.id(),
+                    timestamp: Timestamp::from_millisecond(quote.id() as i64)
+                        .unwrap()
+                        .round(Unit::Minute)
+                        .unwrap(),
                     body: quote.text,
                     sender: quote_sender,
                     body_ranges: quote.body_ranges,
@@ -277,7 +292,7 @@ async fn get_contact_cached(
             .map(|name| name.to_string())
             .unwrap_or_default(),
         avatar: avatar.map(image::Handle::from_bytes),
-        color: None,
+        me: manager.registration_data().service_ids.aci,
     })
 }
 

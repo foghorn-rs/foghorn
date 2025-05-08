@@ -10,6 +10,7 @@ iced.features = ["image", "qr_code", "tokio", "advanced"]
 iced.git = "https://github.com/iced-rs/iced"
 
 iced_dialog = { git = "https://github.com/pml68/iced_dialog", branch = "master" }
+jiff = "0.2.13"
 presage = { git = "https://github.com/whisperfish/presage" }
 presage-store-sled = { git = "https://github.com/whisperfish/presage" }
 tokio = "1.45.0"

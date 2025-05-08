@@ -6,15 +6,19 @@ use crate::{
 use iced::{
     Element,
     Length::Fill,
-    Task,
+    Subscription, Task,
     futures::channel::oneshot,
-    widget::{container, qr_code},
+    time::every,
+    widget::{column, container, qr_code, scrollable},
 };
+use jiff::{Timestamp, Unit, tz::TimeZone};
 use presage::libsignal_service::provisioning::ProvisioningError;
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 
 #[derive(Clone, Debug)]
 pub enum Message {
+    Now(Timestamp),
+    Tz(TimeZone),
     ManagerError(Option<Arc<ManagerError>>),
     QrCode(String),
     LinkSecondary,
@@ -23,6 +27,8 @@ pub enum Message {
 }
 
 pub struct App {
+    now: Option<Timestamp>,
+    tz: Option<TimeZone>,
     manager_manager: ManagerManager,
     registered: bool,
     dialog: Dialog,
@@ -36,17 +42,25 @@ impl App {
 
         (
             Self {
+                now: None,
+                tz: None,
                 manager_manager,
                 registered: false,
                 dialog: Dialog::default(),
                 chats: HashMap::new(),
             },
-            Task::perform(register, |err| Message::ManagerError(err.map(Arc::new))),
+            Task::batch([
+                Task::perform(async { TimeZone::system() }, Message::Tz),
+                Task::perform(async { Timestamp::now() }, Message::Now),
+                Task::perform(register, |err| Message::ManagerError(err.map(Arc::new))),
+            ]),
         )
     }
 
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
+            Message::Now(now) => self.now = Some(now.round(Unit::Minute).unwrap()),
+            Message::Tz(tz) => self.tz = Some(tz),
             Message::ManagerError(manager_error) => {
                 if let Some(error) = manager_error {
                     return match &*error {
@@ -116,7 +130,20 @@ impl App {
 
     pub fn view(&self) -> Element<'_, Message> {
         let base: Element<'_, Message> = if self.registered {
-            "registered".into()
+            if let Some((tz, now)) = self.tz.as_ref().zip(self.now) {
+                scrollable(
+                    column(self.chats.values().map(|c| {
+                        column(c.iter().map(|m| m.as_iced_widget(now, tz)))
+                            .spacing(5)
+                            .into()
+                    }))
+                    .padding(5)
+                    .spacing(5),
+                )
+                .into()
+            } else {
+                "registered".into()
+            }
         } else {
             "not registered".into()
         };
@@ -127,5 +154,10 @@ impl App {
             .height(320);
 
         dialog.into()
+    }
+
+    #[expect(clippy::unused_self)]
+    pub fn subscription(&self) -> Subscription<Message> {
+        every(Duration::from_secs(60)).map(|_| Message::Now(Timestamp::now()))
     }
 }
