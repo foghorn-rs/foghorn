@@ -1,3 +1,3 @@
 pub mod text;
-#[allow(unused_imports)]
+#[expect(unused_imports)]
 pub use text::{Rich, Span};

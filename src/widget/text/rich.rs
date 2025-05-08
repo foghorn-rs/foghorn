@@ -11,7 +11,7 @@ use iced::{
 };
 
 /// A bunch of [`Rich`] text.
-#[allow(missing_debug_implementations)]
+#[expect(missing_debug_implementations)]
 pub struct Rich<'a, Link, Message, Theme = iced::Theme, Renderer = iced::Renderer>
 where
     Link: Clone + 'static,
@@ -67,6 +67,7 @@ where
         }
     }
 
+    #[expect(clippy::same_name_method)]
     /// Sets the default size of the [`Rich`] text.
     pub fn size(mut self, size: impl Into<Pixels>) -> Self {
         self.size = Some(size.into());
@@ -293,7 +294,10 @@ where
                 }
 
                 if span.underline || span.strikethrough || is_hovered_link {
-                    let size = span.size.or(self.size).unwrap_or(renderer.default_size());
+                    let size = span
+                        .size
+                        .or(self.size)
+                        .unwrap_or_else(|| renderer.default_size());
 
                     let line_height = span
                         .line_height
@@ -410,13 +414,13 @@ where
 
                 match state.span_pressed {
                     Some(span) if Some(span) == self.hovered_link => {
-                        if let Some(link) = self
+                        if let Some((link, on_link_clicked)) = self
                             .spans
                             .as_ref()
                             .as_ref()
                             .get(span)
                             .and_then(|span| span.link.clone())
-                            && let Some(on_link_clicked) = &self.on_link_click
+                            .zip(self.on_link_click.as_ref())
                         {
                             shell.publish(on_link_clicked(link));
                         }
@@ -473,8 +477,7 @@ where
         let size = size.unwrap_or_else(|| renderer.default_size());
         let font = font.unwrap_or_else(|| renderer.default_font());
 
-        let iced_spans: Vec<text::Span<'_, Link, Renderer::Font>> =
-            spans.iter().cloned().map(|span| span.into()).collect();
+        let iced_spans: Vec<_> = spans.iter().cloned().map(text::Span::from).collect();
 
         let text_with_spans = || advanced::Text {
             content: iced_spans.as_slice(),
@@ -488,10 +491,7 @@ where
             wrapping,
         };
 
-        if state.spans != spans {
-            state.paragraph = Renderer::Paragraph::with_spans(text_with_spans());
-            state.spans = spans.iter().cloned().map(Span::to_static).collect();
-        } else {
+        if state.spans == spans {
             match state.paragraph.compare(advanced::Text {
                 content: (),
                 bounds,
@@ -511,6 +511,9 @@ where
                     state.paragraph = Renderer::Paragraph::with_spans(text_with_spans());
                 }
             }
+        } else {
+            state.paragraph = Renderer::Paragraph::with_spans(text_with_spans());
+            state.spans = spans.iter().cloned().map(Span::to_static).collect();
         }
 
         state.paragraph.min_bounds()
@@ -562,15 +565,13 @@ where
     Theme: Catalog + 'a,
     Renderer: advanced::text::Renderer + 'a,
 {
-    fn from(
-        text: Rich<'a, Link, Message, Theme, Renderer>,
-    ) -> Element<'a, Message, Theme, Renderer> {
+    fn from(text: Rich<'a, Link, Message, Theme, Renderer>) -> Self {
         Element::new(text)
     }
 }
 
 /// The appearance of some text.
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Style {
     /// The [`Color`] of the text.
     ///

@@ -6,7 +6,7 @@ use iced::{
 use std::borrow::Cow;
 
 /// A span of text.
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct Span<'a, Link = (), Font = iced::Font> {
     /// The [`Fragment`] of text.
     pub text: Fragment<'a>,
@@ -173,6 +173,7 @@ impl<'a, Link, Font> Span<'a, Link, Font> {
         self
     }
 
+    #[expect(clippy::wrong_self_convention)]
     /// Turns the [`Span`] into a static one.
     pub fn to_static(self) -> Span<'static, Link, Font> {
         Span {
