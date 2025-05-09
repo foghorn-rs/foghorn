@@ -4,7 +4,7 @@ use iced::{
     border::{self, radius},
     widget::{Row, column, container, horizontal_space, image, text},
 };
-use jiff::{Timestamp, fmt::friendly::SpanPrinter, tz::TimeZone};
+use jiff::{Span, Timestamp, fmt::friendly::SpanPrinter, tz::TimeZone};
 
 impl Message {
     pub fn as_iced_widget<'a, M: 'a>(&'a self, now: Timestamp, tz: &TimeZone) -> Element<'a, M> {
@@ -16,12 +16,13 @@ impl Message {
 
         let timestamp = self.timestamp.to_zoned(tz.clone());
         let now = now.to_zoned(tz.clone());
-        let diff = timestamp.since(&now).unwrap();
 
-        let span = if timestamp.day() == now.day() {
-            SpanPrinter::new().span_to_string(&diff)
+        let span = if timestamp.date() == now.date() {
+            SpanPrinter::new().span_to_string(&timestamp.since(&now).unwrap())
+        } else if timestamp.date() == now.date() - Span::new().days(1) {
+            timestamp.strftime("yesterday at %H:%M").to_string()
         } else {
-            timestamp.to_string()
+            timestamp.strftime("%d.%m.%Y at %H:%M").to_string()
         };
 
         let content = container(content).max_width(500).padding(10).style(|t| {
