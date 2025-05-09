@@ -137,7 +137,7 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Event>) {
             }
             Event::StreamMessages(c) => {
                 let store = store.clone();
-                let mut manager = manager.borrow().clone().unwrap();
+                let manager = manager.borrow().clone().unwrap();
                 task::spawn_local(async move {
                     let chats = Rc::new(RefCell::new(HashMap::new()));
 
@@ -178,8 +178,6 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Event>) {
                             });
                         }
                     }
-
-                    Box::pin(manager.request_contacts()).await.unwrap();
 
                     let mut stream = manager
                         .clone()
