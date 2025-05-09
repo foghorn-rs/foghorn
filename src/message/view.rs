@@ -2,28 +2,31 @@ use super::Message;
 use iced::{
     Alignment, Element, Fill, Shrink,
     border::{self, radius},
-    widget::{Row, column, container, horizontal_space, image, text},
+    widget::{Column, Row, container, horizontal_space, image, text},
 };
 use jiff::{Span, Timestamp, fmt::friendly::SpanPrinter, tz::TimeZone};
 
 impl Message {
     pub fn as_iced_widget<'a, M: 'a>(&'a self, now: Timestamp, tz: &TimeZone) -> Element<'a, M> {
-        let mut content = column![text(&self.sender.name).size(10)].spacing(2);
-
-        if let Some(body) = self.body.as_deref() {
-            content = content.push(text(body));
-        }
-
         let timestamp = self.timestamp.to_zoned(tz.clone());
         let now = now.to_zoned(tz.clone());
 
-        let span = if timestamp.date() == now.date() {
+        let timestamp = if timestamp.date() == now.date() {
             SpanPrinter::new().span_to_string(&timestamp.since(&now).unwrap())
         } else if timestamp.date() == now.date() - Span::new().days(1) {
             timestamp.strftime("yesterday at %H:%M").to_string()
         } else {
             timestamp.strftime("%d.%m.%Y at %H:%M").to_string()
         };
+
+        let head = self.sender.name.clone() + ", " + &timestamp;
+
+        let content = [
+            Some(text(head).size(10).into()),
+            self.body.as_deref().map(|body| text(body).into()),
+        ];
+
+        let content = content.into_iter().flatten().collect::<Column<'_, _>>();
 
         let content = container(content).max_width(500).padding(10).style(|t| {
             container::primary(t).border({
@@ -43,7 +46,6 @@ impl Message {
                     .into()
             }),
             Some(content.into()),
-            Some(text(span).into()),
             Some(horizontal_space().into()),
         ];
 
@@ -54,7 +56,7 @@ impl Message {
         items
             .into_iter()
             .flatten()
-            .collect::<Row<'a, _>>()
+            .collect::<Row<'_, _>>()
             .height(Shrink)
             .spacing(5)
             .align_y(Alignment::Center)
