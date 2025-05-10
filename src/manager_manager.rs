@@ -138,7 +138,7 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Event>) {
             Event::StreamMessages(c) => {
                 let manager = manager.borrow().clone().unwrap();
                 task::spawn_local(async move {
-                    let chats = Rc::new(RefCell::new(HashMap::new()));
+                    let cache = Rc::new(RefCell::new(HashMap::new()));
 
                     for thread in manager
                         .store()
@@ -168,11 +168,11 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Event>) {
                             .flatten()
                         {
                             let mut manager = manager.clone();
-                            let chats = chats.clone();
+                            let cache = cache.clone();
                             let mut c = c.clone();
                             task::spawn_local(async move {
                                 if let Some(message) =
-                                    decode_content(message, &mut manager, &chats).await
+                                    decode_content(message, &mut manager, &cache).await
                                 {
                                     c.send(message).await.unwrap();
                                 }
@@ -190,11 +190,11 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Event>) {
                     while let Some(next) = stream.next().await {
                         if let Received::Content(message) = next {
                             let mut manager = manager.clone();
-                            let chats = chats.clone();
+                            let cache = cache.clone();
                             let mut c = c.clone();
                             task::spawn_local(async move {
                                 if let Some(message) =
-                                    decode_content(*message, &mut manager, &chats).await
+                                    decode_content(*message, &mut manager, &cache).await
                                 {
                                     c.send(message).await.unwrap();
                                 }

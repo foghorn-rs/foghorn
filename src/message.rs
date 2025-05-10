@@ -1,13 +1,16 @@
-use crate::manager_manager::{ManagerError, RegisteredManager};
+use crate::manager_manager::RegisteredManager;
 use iced::widget::image;
 use jiff::{Timestamp, Unit};
 use presage::{
     libsignal_service::{
         content::{ContentBody, Metadata},
         prelude::{Content, ProfileKey, Uuid},
-        zkgroup::{GROUP_MASTER_KEY_LEN, GroupMasterKeyBytes, PROFILE_KEY_LEN},
+        zkgroup::{GroupMasterKeyBytes, ProfileKeyBytes},
     },
-    proto::{AttachmentPointer, BodyRange, DataMessage, SyncMessage, sync_message::Sent},
+    proto::{
+        AttachmentPointer, BodyRange, DataMessage, GroupContextV2, SyncMessage, data_message,
+        sync_message::Sent,
+    },
     store::{ContentsStore as _, Thread},
 };
 use std::{
@@ -24,18 +27,21 @@ pub enum Chat {
     Group(Group),
 }
 
+impl Chat {
+    fn contact(&self) -> Option<Contact> {
+        match self {
+            Self::Contact(contact) => Some(contact.clone()),
+            Self::Group(_) => None,
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Contact {
     pub uuid: Uuid,
     pub name: String,
     pub avatar: Option<image::Handle>,
-    me: Uuid,
-}
-
-impl Contact {
-    pub fn is_me(&self) -> bool {
-        self.me == self.uuid
-    }
+    pub is_self: bool,
 }
 
 impl PartialEq for Contact {
@@ -104,6 +110,34 @@ pub struct Message {
     pub body_ranges: Vec<BodyRange>,
 }
 
+impl Message {
+    fn new(
+        timestamp: u64,
+        body: Option<String>,
+        attachments: Vec<AttachmentPointer>,
+        sender: Uuid,
+        sticker: Option<data_message::Sticker>,
+        quote: Option<data_message::Quote>,
+        body_ranges: Vec<BodyRange>,
+        cache: &RefCell<HashMap<Thread, Chat>>,
+    ) -> Option<Self> {
+        Some(Self {
+            timestamp: Timestamp::from_millisecond(timestamp as i64)
+                .unwrap()
+                .round(Unit::Minute)
+                .unwrap(),
+            body,
+            attachments: attachments.into_iter().map(Attachment::from).collect(),
+            sender: cache.borrow().get(&Thread::Contact(sender))?.contact()?,
+            sticker: sticker
+                .and_then(|sticker| sticker.data)
+                .map(Attachment::from),
+            quote: quote.map(|quote| Quote::new(quote, cache)),
+            body_ranges,
+        })
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Quote {
     pub timestamp: Timestamp,
@@ -112,33 +146,36 @@ pub struct Quote {
     pub body_ranges: Vec<BodyRange>,
 }
 
+impl Quote {
+    fn new(quote: data_message::Quote, cache: &RefCell<HashMap<Thread, Chat>>) -> Self {
+        Self {
+            timestamp: Timestamp::from_millisecond(quote.id() as i64)
+                .unwrap()
+                .round(Unit::Minute)
+                .unwrap(),
+            body: quote.text,
+            sender: quote
+                .author_aci
+                .and_then(|sender| sender.parse().ok())
+                .and_then(|sender| cache.borrow().get(&Thread::Contact(sender))?.contact()),
+            body_ranges: quote.body_ranges,
+        }
+    }
+}
+
 pub async fn decode_content(
     content: Content,
     manager: &mut RegisteredManager,
-    chats: &RefCell<HashMap<Thread, Chat>>,
+    cache: &RefCell<HashMap<Thread, Chat>>,
 ) -> Option<(Chat, Message)> {
     match (content.metadata, content.body) {
-        // incoming direct/group message
         (
-            Metadata {
-                timestamp,
-                sender,
-                destination,
-                ..
-            },
-            ContentBody::DataMessage(DataMessage {
-                body,
-                attachments,
-                group_v2,
-                profile_key,
-                quote,
-                sticker,
-                body_ranges,
-                ..
-            })
-            | ContentBody::SynchronizeMessage(SyncMessage {
+            Metadata { sender, .. },
+            ContentBody::SynchronizeMessage(SyncMessage {
                 sent:
                     Some(Sent {
+                        destination_service_id,
+                        timestamp,
                         message:
                             Some(DataMessage {
                                 body,
@@ -155,122 +192,60 @@ pub async fn decode_content(
                 ..
             }),
         ) => {
+            let timestamp = timestamp?;
+
             let chat = if let Some(context) = group_v2 {
-                let master_key = context.master_key();
-                let revision = context.revision();
-
-                let mut key = [0; GROUP_MASTER_KEY_LEN];
-                key.copy_from_slice(master_key.get(..GROUP_MASTER_KEY_LEN)?);
-                let chat = Thread::Group(key);
-
-                let group = manager.store().group(key).await.ok()??;
-
-                if group.revision != revision || !chats.borrow().contains_key(&chat) {
-                    let mut members = Vec::new();
-
-                    for member in &group.members {
-                        let chat = Thread::Contact(member.uuid);
-
-                        if let Some(contact) = chats.borrow().get(&chat) {
-                            let Chat::Contact(contact) = contact else {
-                                return None;
-                            };
-
-                            members.push(contact.clone());
-                        } else {
-                            let contact =
-                                retrieve_contact_by_uuid(member.uuid, member.profile_key, manager)
-                                    .await
-                                    .ok()?;
-
-                            chats
-                                .borrow_mut()
-                                .insert(chat, Chat::Contact(contact.clone()));
-
-                            members.push(contact);
-                        }
-                    }
-
-                    let avatar = manager
-                        .retrieve_group_avatar(context)
-                        .await
-                        .ok()?
-                        .map(image::Handle::from_bytes);
-
-                    chats.borrow_mut().insert(
-                        chat.clone(),
-                        Chat::Group(Group {
-                            key,
-                            title: group.title,
-                            avatar,
-                            members,
-                        }),
-                    );
-                }
-
-                chat
+                get_group_cached(context, manager, cache).await?
             } else {
-                let uuid = if sender.raw_uuid() == manager.registration_data().service_ids.aci {
-                    destination.raw_uuid()
-                } else {
-                    sender.raw_uuid()
-                };
-                let chat = Thread::Contact(uuid);
-
-                if !chats.borrow().contains_key(&chat) {
-                    let mut bytes = [0; PROFILE_KEY_LEN];
-                    bytes.copy_from_slice(profile_key?.get(..PROFILE_KEY_LEN)?);
-
-                    let contact = retrieve_contact_by_uuid(uuid, ProfileKey { bytes }, manager)
-                        .await
-                        .ok()?;
-
-                    chats
-                        .borrow_mut()
-                        .insert(chat.clone(), Chat::Contact(contact));
-                }
-
-                chat
-            };
-            let chat = chats.borrow()[&chat].clone();
-
-            let quote_sender = if let Some(quote) = &quote {
-                let chat = Thread::Contact(quote.author_aci().parse().ok()?);
-
-                if let Some(Chat::Contact(sender)) = chats.borrow().get(&chat) {
-                    Some(sender.clone())
-                } else {
-                    None
-                }
-            } else {
-                None
+                let uuid = destination_service_id?.parse().ok()?;
+                get_contact_cached(uuid, profile_key.as_deref(), manager, cache).await?
             };
 
-            let Chat::Contact(sender) = &chats.borrow()[&Thread::Contact(sender.raw_uuid())] else {
-                return None;
-            };
-            let sender = sender.clone();
-
-            let message = Message {
-                timestamp: Timestamp::from_millisecond(timestamp as i64)
-                    .unwrap()
-                    .round(Unit::Minute)
-                    .unwrap(),
+            let message = Message::new(
+                timestamp,
                 body,
-                attachments: attachments.into_iter().map(Attachment::from).collect(),
-                sender,
-                sticker: sticker.and_then(|sticker| sticker.data.map(Attachment::from)),
-                quote: quote.map(|quote| Quote {
-                    timestamp: Timestamp::from_millisecond(quote.id() as i64)
-                        .unwrap()
-                        .round(Unit::Minute)
-                        .unwrap(),
-                    body: quote.text,
-                    sender: quote_sender,
-                    body_ranges: quote.body_ranges,
-                }),
+                attachments,
+                sender.raw_uuid(),
+                sticker,
+                quote,
                 body_ranges,
+                cache,
+            )?;
+
+            Some((chat, message))
+        }
+        (
+            Metadata {
+                sender, timestamp, ..
+            },
+            ContentBody::DataMessage(DataMessage {
+                body,
+                attachments,
+                group_v2,
+                profile_key,
+                quote,
+                sticker,
+                body_ranges,
+                ..
+            }),
+        ) => {
+            let chat = if let Some(context) = group_v2 {
+                get_group_cached(context, manager, cache).await?
+            } else {
+                get_contact_cached(sender.raw_uuid(), profile_key.as_deref(), manager, cache)
+                    .await?
             };
+
+            let message = Message::new(
+                timestamp,
+                body,
+                attachments,
+                sender.raw_uuid(),
+                sticker,
+                quote,
+                body_ranges,
+                cache,
+            )?;
 
             Some((chat, message))
         }
@@ -278,23 +253,86 @@ pub async fn decode_content(
     }
 }
 
-async fn retrieve_contact_by_uuid(
-    uuid: Uuid,
-    profile_key: ProfileKey,
+async fn get_group_cached(
+    context: GroupContextV2,
     manager: &mut RegisteredManager,
-) -> Result<Contact, ManagerError> {
-    Ok(Contact {
+    cache: &RefCell<HashMap<Thread, Chat>>,
+) -> Option<Chat> {
+    let key = context.master_key().try_into().ok()?;
+    let revision = context.revision();
+
+    let chat = Thread::Group(key);
+    let group = manager.store().group(key).await.ok()??;
+
+    if group.revision == revision {
+        if let Some(chat) = cache.borrow().get(&chat) {
+            return Some(chat.clone());
+        }
+    }
+
+    let mut members = Vec::new();
+
+    for member in &group.members {
+        let member =
+            get_contact_cached(member.uuid, Some(member.profile_key.bytes), manager, cache)
+                .await?
+                .contact()?;
+
+        members.push(member);
+    }
+
+    let avatar = manager
+        .retrieve_group_avatar(context)
+        .await
+        .ok()?
+        .map(image::Handle::from_bytes);
+
+    cache.borrow_mut().insert(
+        chat.clone(),
+        Chat::Group(Group {
+            key,
+            title: group.title,
+            avatar,
+            members,
+        }),
+    );
+
+    Some(cache.borrow()[&chat].clone())
+}
+
+async fn get_contact_cached(
+    uuid: Uuid,
+    profile_key: Option<impl TryInto<ProfileKeyBytes>>,
+    manager: &mut RegisteredManager,
+    cache: &RefCell<HashMap<Thread, Chat>>,
+) -> Option<Chat> {
+    let chat = Thread::Contact(uuid);
+
+    if let Some(chat) = cache.borrow().get(&chat) {
+        return Some(chat.clone());
+    }
+
+    let profile_key = ProfileKey::create(profile_key?.try_into().ok()?);
+
+    let contact = Contact {
         uuid,
         name: manager
             .retrieve_profile_by_uuid(uuid, profile_key)
-            .await?
-            .name
-            .map(|name| name.to_string())
-            .unwrap_or_default(),
+            .await
+            .ok()?
+            .name?
+            .to_string(),
         avatar: manager
             .retrieve_profile_avatar_by_uuid(uuid, profile_key)
-            .await?
+            .await
+            .ok()?
             .map(image::Handle::from_bytes),
-        me: manager.registration_data().service_ids.aci,
-    })
+        is_self: uuid == manager.registration_data().service_ids.aci,
+    };
+
+    cache
+        .borrow_mut()
+        .insert(chat.clone(), Chat::Contact(contact));
+
+    Some(cache.borrow()[&chat].clone())
 }

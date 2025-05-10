@@ -30,7 +30,7 @@ impl Message {
 
         let content = container(content).max_width(500).padding(10).style(|t| {
             container::primary(t).border({
-                border::rounded(if self.sender.is_me() {
+                border::rounded(if self.sender.is_self {
                     radius(15).top_right(5)
                 } else {
                     radius(15).top_left(5)
@@ -49,7 +49,7 @@ impl Message {
             Some(horizontal_space().into()),
         ];
 
-        if self.sender.is_me() {
+        if self.sender.is_self {
             items.reverse();
         }
 
