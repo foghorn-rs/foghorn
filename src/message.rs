@@ -1,19 +1,15 @@
-use crate::manager_manager::RegisteredManager;
+use crate::manager_manager::{ManagerError, RegisteredManager};
 use iced::widget::image;
 use jiff::{Timestamp, Unit};
 use presage::{
     libsignal_service::{
-        Profile,
         content::{ContentBody, Metadata},
         prelude::{Content, ProfileKey, Uuid},
         zkgroup::{GROUP_MASTER_KEY_LEN, GroupMasterKeyBytes, PROFILE_KEY_LEN},
     },
-    proto::{
-        AttachmentPointer, BodyRange, DataMessage, GroupContextV2, SyncMessage, sync_message::Sent,
-    },
+    proto::{AttachmentPointer, BodyRange, DataMessage, SyncMessage, sync_message::Sent},
     store::{ContentsStore as _, Thread},
 };
-use presage_store_sled::SledStore;
 use std::{
     cell::RefCell,
     collections::HashMap,
@@ -86,6 +82,17 @@ pub struct Attachment {
     pub preview: Option<image::Handle>,
 }
 
+impl From<AttachmentPointer> for Attachment {
+    fn from(ptr: AttachmentPointer) -> Self {
+        Self {
+            preview: ptr.thumbnail.clone().map(image::Handle::from_bytes),
+            ptr,
+            data: None,
+            image: None,
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Message {
     pub timestamp: Timestamp,
@@ -108,7 +115,6 @@ pub struct Quote {
 pub async fn decode_content(
     content: Content,
     manager: &mut RegisteredManager,
-    store: &mut SledStore,
     chats: &RefCell<HashMap<Thread, Chat>>,
 ) -> Option<(Chat, Message)> {
     match (content.metadata, content.body) {
@@ -157,36 +163,46 @@ pub async fn decode_content(
                 key.copy_from_slice(master_key.get(..GROUP_MASTER_KEY_LEN)?);
                 let chat = Thread::Group(key);
 
-                let group = store.group(key).await.ok()??;
+                let group = manager.store().group(key).await.ok()??;
 
                 if group.revision != revision || !chats.borrow().contains_key(&chat) {
                     let mut members = Vec::new();
-                    for member in &group.members {
-                        let contact =
-                            get_contact_cached(member.uuid, member.profile_key, manager, store)
-                                .await?;
 
-                        members.push(
-                            if let Chat::Contact(contact) = chats
-                                .borrow_mut()
-                                .entry(Thread::Contact(member.uuid))
-                                .or_insert_with(|| Chat::Contact(contact()))
-                            {
-                                contact.clone()
-                            } else {
+                    for member in &group.members {
+                        let chat = Thread::Contact(member.uuid);
+
+                        if let Some(contact) = chats.borrow().get(&chat) {
+                            let Chat::Contact(contact) = contact else {
                                 return None;
-                            },
-                        );
+                            };
+
+                            members.push(contact.clone());
+                        } else {
+                            let contact =
+                                retrieve_contact_by_uuid(member.uuid, member.profile_key, manager)
+                                    .await
+                                    .ok()?;
+
+                            chats
+                                .borrow_mut()
+                                .insert(chat, Chat::Contact(contact.clone()));
+
+                            members.push(contact);
+                        }
                     }
 
-                    let avatar = get_group_avatar_cached(key, revision, manager, store).await;
+                    let avatar = manager
+                        .retrieve_group_avatar(context)
+                        .await
+                        .ok()?
+                        .map(image::Handle::from_bytes);
 
                     chats.borrow_mut().insert(
                         chat.clone(),
                         Chat::Group(Group {
                             key,
                             title: group.title,
-                            avatar: avatar.map(image::Handle::from_bytes),
+                            avatar,
                             members,
                         }),
                     );
@@ -205,8 +221,9 @@ pub async fn decode_content(
                     let mut bytes = [0; PROFILE_KEY_LEN];
                     bytes.copy_from_slice(profile_key?.get(..PROFILE_KEY_LEN)?);
 
-                    let contact =
-                        get_contact_cached(uuid, ProfileKey { bytes }, manager, store).await?();
+                    let contact = retrieve_contact_by_uuid(uuid, ProfileKey { bytes }, manager)
+                        .await
+                        .ok()?;
 
                     chats
                         .borrow_mut()
@@ -240,24 +257,9 @@ pub async fn decode_content(
                     .round(Unit::Minute)
                     .unwrap(),
                 body,
-                attachments: attachments
-                    .into_iter()
-                    .map(|ptr| Attachment {
-                        preview: ptr.thumbnail.clone().map(image::Handle::from_bytes),
-                        ptr,
-                        data: None,
-                        image: None,
-                    })
-                    .collect(),
+                attachments: attachments.into_iter().map(Attachment::from).collect(),
                 sender,
-                sticker: sticker.and_then(|sticker| {
-                    sticker.data.map(|ptr| Attachment {
-                        preview: ptr.thumbnail.clone().map(image::Handle::from_bytes),
-                        ptr,
-                        data: None,
-                        image: None,
-                    })
-                }),
+                sticker: sticker.and_then(|sticker| sticker.data.map(Attachment::from)),
                 quote: quote.map(|quote| Quote {
                     timestamp: Timestamp::from_millisecond(quote.id() as i64)
                         .unwrap()
@@ -276,92 +278,23 @@ pub async fn decode_content(
     }
 }
 
-async fn get_contact_cached(
+async fn retrieve_contact_by_uuid(
     uuid: Uuid,
     profile_key: ProfileKey,
     manager: &mut RegisteredManager,
-    store: &mut SledStore,
-) -> Option<impl FnOnce() -> Contact> {
-    let profile = get_profile_cached(uuid, profile_key, manager, store).await?;
-    let avatar = get_profile_avatar_cached(uuid, profile_key, manager, store).await;
-
-    Some(move || Contact {
+) -> Result<Contact, ManagerError> {
+    Ok(Contact {
         uuid,
-        name: profile
+        name: manager
+            .retrieve_profile_by_uuid(uuid, profile_key)
+            .await?
             .name
             .map(|name| name.to_string())
             .unwrap_or_default(),
-        avatar: avatar.map(image::Handle::from_bytes),
+        avatar: manager
+            .retrieve_profile_avatar_by_uuid(uuid, profile_key)
+            .await?
+            .map(image::Handle::from_bytes),
         me: manager.registration_data().service_ids.aci,
     })
-}
-
-async fn get_profile_cached(
-    uuid: Uuid,
-    profile_key: ProfileKey,
-    manager: &mut RegisteredManager,
-    store: &mut SledStore,
-) -> Option<Profile> {
-    if let Some(profile) = store.profile(uuid, profile_key).await.ok()? {
-        Some(profile)
-    } else {
-        let profile = manager
-            .retrieve_profile_by_uuid(uuid, profile_key)
-            .await
-            .ok()?;
-
-        store
-            .save_profile(uuid, profile_key, profile.clone())
-            .await
-            .ok()?;
-
-        Some(profile)
-    }
-}
-
-async fn get_profile_avatar_cached(
-    uuid: Uuid,
-    profile_key: ProfileKey,
-    manager: &mut RegisteredManager,
-    store: &mut SledStore,
-) -> Option<Vec<u8>> {
-    if let Some(avatar) = store.profile_avatar(uuid, profile_key).await.ok()? {
-        Some(avatar)
-    } else {
-        let avatar = manager
-            .retrieve_profile_avatar_by_uuid(uuid, profile_key)
-            .await
-            .ok()??;
-
-        store
-            .save_profile_avatar(uuid, profile_key, &avatar)
-            .await
-            .ok()?;
-
-        Some(avatar)
-    }
-}
-
-async fn get_group_avatar_cached(
-    master_key: GroupMasterKeyBytes,
-    revision: u32,
-    manager: &mut RegisteredManager,
-    store: &SledStore,
-) -> Option<Vec<u8>> {
-    if let Some(avatar) = store.group_avatar(master_key).await.ok()? {
-        Some(avatar)
-    } else {
-        let avatar = manager
-            .retrieve_group_avatar(GroupContextV2 {
-                master_key: Some(master_key.into()),
-                revision: Some(revision),
-                group_change: None,
-            })
-            .await
-            .ok()??;
-
-        store.save_group_avatar(master_key, &avatar).await.ok()?;
-
-        Some(avatar)
-    }
 }

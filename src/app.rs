@@ -140,6 +140,7 @@ impl App {
                     .padding(5)
                     .spacing(5),
                 )
+                .spacing(0)
                 .into()
             } else {
                 "registered".into()

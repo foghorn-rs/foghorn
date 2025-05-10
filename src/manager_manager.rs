@@ -136,12 +136,12 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Event>) {
                 task::spawn_local(async { url.send(rx.await.unwrap().to_string()) });
             }
             Event::StreamMessages(c) => {
-                let store = store.clone();
                 let manager = manager.borrow().clone().unwrap();
                 task::spawn_local(async move {
                     let chats = Rc::new(RefCell::new(HashMap::new()));
 
-                    for thread in store
+                    for thread in manager
+                        .store()
                         .contacts()
                         .await
                         .into_iter()
@@ -149,7 +149,8 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Event>) {
                         .flatten()
                         .map(|c| Thread::Contact(c.uuid))
                         .chain(
-                            store
+                            manager
+                                .store()
                                 .groups()
                                 .await
                                 .into_iter()
@@ -158,20 +159,20 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Event>) {
                                 .map(|g| Thread::Group(g.0)),
                         )
                     {
-                        for message in store
+                        for message in manager
+                            .store()
                             .messages(&thread, ..)
                             .await
                             .into_iter()
                             .flatten()
                             .flatten()
                         {
-                            let mut store = store.clone();
                             let mut manager = manager.clone();
                             let chats = chats.clone();
                             let mut c = c.clone();
                             task::spawn_local(async move {
                                 if let Some(message) =
-                                    decode_content(message, &mut manager, &mut store, &chats).await
+                                    decode_content(message, &mut manager, &chats).await
                                 {
                                     c.send(message).await.unwrap();
                                 }
@@ -188,13 +189,12 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Event>) {
 
                     while let Some(next) = stream.next().await {
                         if let Received::Content(message) = next {
-                            let mut store = store.clone();
                             let mut manager = manager.clone();
                             let chats = chats.clone();
                             let mut c = c.clone();
                             task::spawn_local(async move {
                                 if let Some(message) =
-                                    decode_content(*message, &mut manager, &mut store, &chats).await
+                                    decode_content(*message, &mut manager, &chats).await
                                 {
                                     c.send(message).await.unwrap();
                                 }
