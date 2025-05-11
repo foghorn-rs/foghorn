@@ -1,10 +1,37 @@
-use super::Message;
+use super::{Chat, Message};
 use iced::{
     Alignment, Element, Fill, Shrink,
     border::{self, radius},
-    widget::{Column, Row, container, horizontal_space, image, text},
+    widget::{column, container, horizontal_space, image, row, text},
 };
-use jiff::{Span, Timestamp, fmt::friendly::SpanPrinter, tz::TimeZone};
+use jiff::{Span, Timestamp, Unit, fmt::friendly::SpanPrinter, tz::TimeZone};
+
+impl Chat {
+    pub fn as_iced_widget<'a, M: 'a>(&'a self) -> Element<'a, M> {
+        let name = match self {
+            Self::Contact(contact) => &contact.name,
+            Self::Group(group) => &group.title,
+        };
+
+        let avatar = match self {
+            Self::Contact(contact) => &contact.avatar,
+            Self::Group(group) => &group.avatar,
+        };
+
+        let content = [
+            avatar
+                .clone()
+                .map(|handle| container(image(handle).height(50)).into()),
+            Some(horizontal_space().into()),
+            Some(text(name).into()),
+        ];
+
+        row(content.into_iter().flatten())
+            .align_y(Alignment::Center)
+            .height(Shrink)
+            .into()
+    }
+}
 
 impl Message {
     pub fn as_iced_widget<'a, M: 'a>(&'a self, now: Timestamp, tz: &TimeZone) -> Element<'a, M> {
@@ -12,7 +39,13 @@ impl Message {
         let now = now.to_zoned(tz.clone());
 
         let timestamp = if timestamp.date() == now.date() {
-            SpanPrinter::new().span_to_string(&timestamp.since(&now).unwrap())
+            let diff = timestamp.since(&now).unwrap().round(Unit::Minute).unwrap();
+
+            if diff.is_zero() {
+                "now".to_owned()
+            } else {
+                SpanPrinter::new().span_to_string(&diff)
+            }
         } else if timestamp.date() == now.date() - Span::new().days(1) {
             timestamp.strftime("yesterday at %H:%M").to_string()
         } else {
@@ -26,7 +59,7 @@ impl Message {
             self.body.as_deref().map(|body| text(body).into()),
         ];
 
-        let content = content.into_iter().flatten().collect::<Column<'_, _>>();
+        let content = column(content.into_iter().flatten());
 
         let content = container(content).max_width(500).padding(10).style(|t| {
             container::primary(t).border({
@@ -53,13 +86,10 @@ impl Message {
             items.reverse();
         }
 
-        items
-            .into_iter()
-            .flatten()
-            .collect::<Row<'_, _>>()
+        row(items.into_iter().flatten())
+            .align_y(Alignment::Center)
             .height(Shrink)
             .spacing(5)
-            .align_y(Alignment::Center)
             .into()
     }
 }

@@ -2,37 +2,42 @@ use crate::{
     dialog::{Action, Dialog},
     manager_manager::{ManagerError, ManagerManager},
     message,
+    widget::vsplit::{self, VSplit},
 };
 use iced::{
     Element,
     Length::Fill,
     Subscription, Task,
     futures::channel::oneshot,
+    padding,
     time::every,
-    widget::{column, container, qr_code, scrollable},
+    widget::{button, column, container, horizontal_space, qr_code, scrollable},
 };
-use jiff::{Timestamp, Unit, tz::TimeZone};
+use jiff::{Timestamp, tz::TimeZone};
 use presage::libsignal_service::provisioning::ProvisioningError;
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::{cmp::Reverse, collections::HashMap, sync::Arc, time::Duration};
 
 #[derive(Clone, Debug)]
 pub enum Message {
-    Now(Timestamp),
-    Tz(TimeZone),
     ManagerError(Option<Arc<ManagerError>>),
     QrCode(String),
     LinkSecondary,
     Received((message::Chat, message::Message)),
     CloseDialog,
+    Now(Timestamp),
+    Tz(TimeZone),
+    OpenChat(message::Chat),
+    SplitAt(f32),
 }
 
 pub struct App {
-    now: Option<Timestamp>,
-    tz: Option<TimeZone>,
     manager_manager: ManagerManager,
-    registered: bool,
     dialog: Dialog,
     chats: HashMap<message::Chat, Vec<message::Message>>,
+    now: Option<Timestamp>,
+    tz: Option<TimeZone>,
+    open_chat: Option<message::Chat>,
+    split_at: f32,
 }
 
 impl App {
@@ -42,12 +47,13 @@ impl App {
 
         (
             Self {
-                now: None,
-                tz: None,
                 manager_manager,
-                registered: false,
                 dialog: Dialog::default(),
                 chats: HashMap::new(),
+                now: None,
+                tz: None,
+                open_chat: None,
+                split_at: 270.0,
             },
             Task::batch([
                 Task::perform(async { TimeZone::system() }, Message::Tz),
@@ -59,8 +65,6 @@ impl App {
 
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
-            Message::Now(now) => self.now = Some(now.round(Unit::Minute).unwrap()),
-            Message::Tz(tz) => self.tz = Some(tz),
             Message::ManagerError(manager_error) => {
                 if let Some(error) = manager_error {
                     return match &*error {
@@ -82,7 +86,6 @@ impl App {
                     };
                 }
 
-                self.registered = true;
                 self.dialog.close();
 
                 return Task::future(self.manager_manager.clone().stream_mesages())
@@ -90,18 +93,14 @@ impl App {
                     .map(Message::Received);
             }
             Message::LinkSecondary => {
-                if self.registered {
-                    self.dialog.close();
-                } else {
-                    let (tx, rx) = oneshot::channel();
+                let (tx, rx) = oneshot::channel();
 
-                    return Task::batch([
-                        Task::perform(self.manager_manager.clone().link_secondary(tx), |err| {
-                            Message::ManagerError(err.map(Arc::new))
-                        }),
-                        Task::perform(rx, |url| Message::QrCode(url.unwrap())),
-                    ]);
-                }
+                return Task::batch([
+                    Task::perform(self.manager_manager.clone().link_secondary(tx), |err| {
+                        Message::ManagerError(err.map(Arc::new))
+                    }),
+                    Task::perform(rx, |url| Message::QrCode(url.unwrap())),
+                ]);
             }
             Message::QrCode(url) => {
                 self.dialog = Dialog::new(
@@ -116,40 +115,66 @@ impl App {
                     .entry(chat)
                     .and_modify(|m| {
                         m.insert(
-                            m.partition_point(|m| m.timestamp < message.timestamp),
+                            m.partition_point(|m| m.timestamp <= message.timestamp),
                             message.clone(),
                         );
                     })
                     .or_insert_with(|| vec![message]);
             }
             Message::CloseDialog => self.dialog.close(),
+            Message::OpenChat(open_chat) => self.open_chat = Some(open_chat),
+            Message::SplitAt(split_at) => self.split_at = split_at.clamp(170.0, 370.0),
+            Message::Now(now) => self.now = Some(now),
+            Message::Tz(tz) => self.tz = Some(tz),
         }
 
         Task::none()
     }
 
     pub fn view(&self) -> Element<'_, Message> {
-        let base: Element<'_, Message> = if self.registered {
-            if let Some((tz, now)) = self.tz.as_ref().zip(self.now) {
-                scrollable(
-                    column(self.chats.values().map(|c| {
-                        column(c.iter().map(|m| m.as_iced_widget(now, tz)))
-                            .spacing(5)
-                            .into()
-                    }))
-                    .padding(5)
-                    .spacing(5),
+        let mut contacts = self.chats.keys().collect::<Vec<_>>();
+        contacts.sort_by_key(|c| Reverse(self.chats[c].last().map(|c| c.timestamp)));
+        let contacts = column![
+            "Chats",
+            scrollable(
+                column(contacts.into_iter().map(|c| {
+                    button(c.as_iced_widget())
+                        .on_press(Message::OpenChat(c.clone()))
+                        .padding(5)
+                        .style(button::secondary)
+                        .into()
+                }))
+                .spacing(5)
+            )
+            .spacing(5)
+        ]
+        .padding(padding::all(5).right(0))
+        .spacing(5);
+
+        let chat = if let Some(((tz, now), open_chat)) =
+            self.tz.as_ref().zip(self.now).zip(self.open_chat.as_ref())
+        {
+            scrollable(
+                column(
+                    self.chats[open_chat]
+                        .iter()
+                        .map(|chat| chat.as_iced_widget(now, tz)),
                 )
-                .spacing(0)
-                .into()
-            } else {
-                "registered".into()
-            }
+                .padding(padding::all(5).left(0))
+                .spacing(5),
+            )
+            .anchor_bottom()
+            .spacing(0)
+            .into()
         } else {
-            "not registered".into()
+            Element::new(horizontal_space())
         };
 
-        let dialog: iced_dialog::Dialog<'_, Message> = self
+        let base = VSplit::new(contacts, chat, Message::SplitAt)
+            .split_at(self.split_at)
+            .strategy(vsplit::Strategy::Left);
+
+        let dialog = self
             .dialog
             .as_iced_dialog(container(base).width(Fill).height(Fill))
             .height(320);
@@ -159,6 +184,6 @@ impl App {
 
     #[expect(clippy::unused_self)]
     pub fn subscription(&self) -> Subscription<Message> {
-        every(Duration::from_secs(60)).map(|_| Message::Now(Timestamp::now()))
+        every(Duration::from_secs(1)).map(|_| Message::Now(Timestamp::now()))
     }
 }

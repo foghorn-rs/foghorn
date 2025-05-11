@@ -1,6 +1,6 @@
 use crate::manager_manager::RegisteredManager;
 use iced::widget::image;
-use jiff::{Timestamp, Unit};
+use jiff::Timestamp;
 use presage::{
     libsignal_service::{
         content::{ContentBody, Metadata},
@@ -122,10 +122,7 @@ impl Message {
         cache: &RefCell<HashMap<Thread, Chat>>,
     ) -> Option<Self> {
         Some(Self {
-            timestamp: Timestamp::from_millisecond(timestamp as i64)
-                .unwrap()
-                .round(Unit::Minute)
-                .unwrap(),
+            timestamp: Timestamp::from_millisecond(timestamp as i64).unwrap(),
             body,
             attachments: attachments.into_iter().map(Attachment::from).collect(),
             sender: cache.borrow().get(&Thread::Contact(sender))?.contact()?,
@@ -149,10 +146,7 @@ pub struct Quote {
 impl Quote {
     fn new(quote: data_message::Quote, cache: &RefCell<HashMap<Thread, Chat>>) -> Self {
         Self {
-            timestamp: Timestamp::from_millisecond(quote.id() as i64)
-                .unwrap()
-                .round(Unit::Minute)
-                .unwrap(),
+            timestamp: Timestamp::from_millisecond(quote.id() as i64).unwrap(),
             body: quote.text,
             sender: quote
                 .author_aci
@@ -170,12 +164,13 @@ pub async fn decode_content(
 ) -> Option<(Chat, Message)> {
     match (content.metadata, content.body) {
         (
-            Metadata { sender, .. },
+            Metadata {
+                sender, timestamp, ..
+            },
             ContentBody::SynchronizeMessage(SyncMessage {
                 sent:
                     Some(Sent {
                         destination_service_id,
-                        timestamp,
                         message:
                             Some(DataMessage {
                                 body,
@@ -192,8 +187,6 @@ pub async fn decode_content(
                 ..
             }),
         ) => {
-            let timestamp = timestamp?;
-
             let chat = if let Some(context) = group_v2 {
                 get_group_cached(context, manager, cache).await?
             } else {
