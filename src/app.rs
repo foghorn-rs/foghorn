@@ -170,8 +170,7 @@ impl App {
             Element::new(horizontal_space())
         };
 
-        let base = VSplit::new(contacts, chat, Message::SplitAt)
-            .split_at(self.split_at)
+        let base = VSplit::new(contacts, chat, self.split_at, Message::SplitAt)
             .strategy(vsplit::Strategy::Left);
 
         let dialog = self
