@@ -3,7 +3,7 @@ use crate::widget::Rich;
 use iced::{
     Alignment, Element, Fill, Shrink,
     border::{self, radius},
-    widget::{column, container, horizontal_space, image, row, text},
+    widget::{column, container, horizontal_space, image, row, text, text::Wrapping},
 };
 use jiff::{Span, Timestamp, Unit, fmt::friendly::SpanPrinter, tz::TimeZone};
 
@@ -56,7 +56,7 @@ impl Message {
         let head = self.sender.name.clone() + ", " + &timestamp;
 
         let content = [
-            Some(text(head).size(10).into()),
+            Some(text(head).size(10).wrapping(Wrapping::WordOrGlyph).into()),
             self.body.as_ref().map(|body| Rich::with_spans(body).into()),
         ];
 
