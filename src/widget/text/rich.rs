@@ -259,7 +259,7 @@ where
                                 + Size::new(span.padding.horizontal(), span.padding.vertical()),
                         );
 
-                        renderer.with_layer(bounds, |renderer| {
+                        renderer.with_layer(layout.bounds(), |renderer| {
                             renderer.fill_quad(
                                 renderer::Quad {
                                     bounds: bounds + translation,

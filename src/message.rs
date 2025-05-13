@@ -1,5 +1,5 @@
-use crate::manager_manager::RegisteredManager;
-use iced::widget::image;
+use crate::{manager_manager::RegisteredManager, widget::Span};
+use iced::{Font, font, widget::image};
 use jiff::Timestamp;
 use presage::{
     libsignal_service::{
@@ -8,8 +8,8 @@ use presage::{
         zkgroup::{GroupMasterKeyBytes, ProfileKeyBytes},
     },
     proto::{
-        AttachmentPointer, BodyRange, DataMessage, GroupContextV2, SyncMessage, data_message,
-        sync_message::Sent,
+        AttachmentPointer, BodyRange, DataMessage, GroupContextV2, SyncMessage,
+        body_range::AssociatedValue, data_message, sync_message::Sent,
     },
     store::{ContentsStore as _, Thread},
 };
@@ -102,23 +102,21 @@ impl From<AttachmentPointer> for Attachment {
 #[derive(Clone, Debug)]
 pub struct Message {
     pub timestamp: Timestamp,
-    pub body: Option<String>,
+    pub body: Option<Vec<Span<'static, String>>>,
     pub attachments: Vec<Attachment>,
     pub sticker: Option<Attachment>,
     pub sender: Contact,
     pub quote: Option<Quote>,
-    pub body_ranges: Vec<BodyRange>,
 }
 
 impl Message {
     fn new(
         timestamp: u64,
-        body: Option<String>,
+        body: Option<Vec<Span<'static, String>>>,
         attachments: Vec<AttachmentPointer>,
         sender: Uuid,
         sticker: Option<data_message::Sticker>,
         quote: Option<data_message::Quote>,
-        body_ranges: Vec<BodyRange>,
         cache: &RefCell<HashMap<Thread, Chat>>,
     ) -> Option<Self> {
         Some(Self {
@@ -130,7 +128,6 @@ impl Message {
                 .and_then(|sticker| sticker.data)
                 .map(Attachment::from),
             quote: quote.map(|quote| Quote::new(quote, cache)),
-            body_ranges,
         })
     }
 }
@@ -194,6 +191,8 @@ pub async fn decode_content(
                 get_contact_cached(uuid, profile_key.as_deref(), manager, cache).await?
             };
 
+            let body = body_ranges_to_spans(body, body_ranges);
+
             let message = Message::new(
                 timestamp,
                 body,
@@ -201,7 +200,6 @@ pub async fn decode_content(
                 sender.raw_uuid(),
                 sticker,
                 quote,
-                body_ranges,
                 cache,
             )?;
 
@@ -229,6 +227,8 @@ pub async fn decode_content(
                     .await?
             };
 
+            let body = body_ranges_to_spans(body, body_ranges);
+
             let message = Message::new(
                 timestamp,
                 body,
@@ -236,7 +236,6 @@ pub async fn decode_content(
                 sender.raw_uuid(),
                 sticker,
                 quote,
-                body_ranges,
                 cache,
             )?;
 
@@ -244,6 +243,87 @@ pub async fn decode_content(
         }
         _ => None,
     }
+}
+
+fn body_ranges_to_spans(
+    body: Option<String>,
+    body_ranges: Vec<BodyRange>,
+) -> Option<Vec<Span<'static, String>>> {
+    let body = body?;
+
+    let mut flags = vec![0u8; body.len()];
+    let mut ranges = body_ranges;
+
+    ranges.sort_unstable_by_key(|range| (range.start(), range.length()));
+
+    for range in ranges {
+        let start = range.start() as usize;
+        let length = range.length() as usize;
+        let end = start + length;
+
+        let style = range.associated_value.as_ref().map_or(0, |value| {
+            (match value {
+                AssociatedValue::MentionAci(_) => 0,
+                AssociatedValue::Style(style) => match style {
+                    style if (0..=5).contains(style) => *style,
+                    style => panic!("Unknown message Style value given: {style}"),
+                },
+            }) as u8
+        });
+
+        for flag in flags.iter_mut().take(end).skip(start) {
+            *flag |= 1 << style;
+        }
+    }
+
+    let get_bit = |flag: u8, i: usize| (flag & (1 << i)) != 0;
+
+    let mut spans: Vec<Span<'static, String>> = vec![];
+    let mut last_flag = flags[0];
+    let mut last_start = 0usize;
+
+    for (index, flag) in flags.iter().enumerate() {
+        if last_flag != *flag || index == flags.len() - 1 {
+            let end = if index == flags.len() - 1 {
+                index + 1
+            } else {
+                index
+            };
+
+            let mut span = Span::new(body[last_start..end].to_string());
+
+            if get_bit(last_flag, 1) {
+                span.font = Some(Font {
+                    weight: font::Weight::Bold,
+                    ..Font::DEFAULT
+                });
+            }
+
+            if get_bit(last_flag, 2) {
+                span.font = Some(Font {
+                    style: font::Style::Italic,
+                    ..span.font.unwrap_or(Font::DEFAULT)
+                });
+            }
+
+            span.spoiler = get_bit(last_flag, 3);
+            span.strikethrough = get_bit(last_flag, 4);
+
+            if get_bit(last_flag, 5) {
+                span.font = Some(Font {
+                    family: font::Family::Monospace,
+                    ..span.font.unwrap_or(Font::DEFAULT)
+                });
+            }
+
+            spans.push(span);
+
+            last_flag = *flag;
+            last_start = index;
+        }
+    }
+
+    Some(spans)
 }
 
 async fn get_group_cached(

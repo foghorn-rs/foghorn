@@ -1,4 +1,5 @@
 use super::{Chat, Message};
+use crate::widget::Rich;
 use iced::{
     Alignment, Element, Fill, Shrink,
     border::{self, radius},
@@ -56,7 +57,7 @@ impl Message {
 
         let content = [
             Some(text(head).size(10).into()),
-            self.body.as_deref().map(|body| text(body).into()),
+            self.body.as_ref().map(|body| Rich::with_spans(body).into()),
         ];
 
         let content = column(content.into_iter().flatten());
