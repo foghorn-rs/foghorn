@@ -28,6 +28,15 @@ pub enum Chat {
 }
 
 impl Chat {
+    pub fn name(&self) -> &str {
+        match self {
+            Self::Contact(contact) => &contact.name,
+            Self::Group(group) => &group.title,
+        }
+    }
+}
+
+impl Chat {
     fn contact(&self) -> Option<Contact> {
         match self {
             Self::Contact(contact) => Some(contact.clone()),

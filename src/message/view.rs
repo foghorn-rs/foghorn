@@ -56,13 +56,17 @@ impl Message {
         let head = self.sender.name.clone() + ", " + &timestamp;
 
         let content = [
-            Some(text(head).size(10).wrapping(Wrapping::WordOrGlyph).into()),
-            self.body.as_ref().map(|body| Rich::with_spans(body).into()),
+            Some(text(head).size(10).into()),
+            self.body.as_ref().map(|body| {
+                Rich::with_spans(body)
+                    .wrapping(Wrapping::WordOrGlyph)
+                    .into()
+            }),
         ];
 
         let content = column(content.into_iter().flatten());
 
-        let content = container(content).max_width(500).padding(10).style(|t| {
+        let content = container(content).max_width(650).padding(10).style(|t| {
             container::primary(t).border({
                 border::rounded(if self.sender.is_self {
                     radius(15).top_right(5)

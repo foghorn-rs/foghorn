@@ -11,7 +11,9 @@ use iced::{
     futures::channel::oneshot,
     padding,
     time::every,
-    widget::{button, column, container, horizontal_space, qr_code, scrollable},
+    widget::{
+        button, column, container, horizontal_rule, horizontal_space, qr_code, scrollable, text,
+    },
 };
 use jiff::{Timestamp, tz::TimeZone};
 use notify_rust::Notification;
@@ -177,17 +179,21 @@ impl App {
         let chat = if let Some(((tz, now), open_chat)) =
             self.tz.as_ref().zip(self.now).zip(self.open_chat.as_ref())
         {
-            scrollable(
-                column(
-                    self.chats[open_chat]
-                        .iter()
-                        .map(|chat| chat.as_iced_widget(now, tz)),
+            column![
+                text(open_chat.name()),
+                horizontal_rule(11),
+                scrollable(
+                    column(
+                        self.chats[open_chat]
+                            .iter()
+                            .map(|chat| chat.as_iced_widget(now, tz)),
+                    )
+                    .spacing(5),
                 )
-                .padding(padding::all(5).left(0))
-                .spacing(5),
-            )
-            .anchor_bottom()
-            .spacing(0)
+                .anchor_bottom()
+                .spacing(0)
+            ]
+            .padding(padding::all(5).left(0))
             .into()
         } else {
             Element::new(horizontal_space())
