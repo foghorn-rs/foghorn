@@ -125,12 +125,11 @@ impl App {
                 return Task::future(async move {
                     // FIXME: don't show notifs for messages loaded from store
                     // FIXME: don't show notifs for messages we sent ourselves
-                    Notification::new()
+                    _ = Notification::new()
                         .summary(&message.sender.name)
                         .body(message.body.as_deref().unwrap_or_default())
                         .show_async()
-                        .await
-                        .unwrap();
+                        .await;
                 })
                 .discard();
             }

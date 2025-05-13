@@ -1487,9 +1487,9 @@ dependencies = [
 
 [[package]]
 name = "fontconfig-parser"
-version = "0.5.7"
+version = "0.5.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c1fcfcd44ca6e90c921fee9fa665d530b21ef1327a4c1a6c5250ea44b776ada7"
+checksum = "bbc773e24e02d4ddd8395fd30dc147524273a83e54e0f312d986ea30de5f5646"
 dependencies = [
  "roxmltree",
 ]
@@ -2065,7 +2065,7 @@ dependencies = [
 [[package]]
 name = "iced"
 version = "0.14.0-dev"
-source = "git+https://github.com/iced-rs/iced?branch=master#7a97773f1796fa7889435c78305d287449dd05a4"
+source = "git+https://github.com/iced-rs/iced?branch=master#3a3a02beef60efb793bebe97f292f6ab2a8fd363"
 dependencies = [
  "iced_core",
  "iced_debug",
@@ -2081,7 +2081,7 @@ dependencies = [
 [[package]]
 name = "iced_core"
 version = "0.14.0-dev"
-source = "git+https://github.com/iced-rs/iced?branch=master#7a97773f1796fa7889435c78305d287449dd05a4"
+source = "git+https://github.com/iced-rs/iced?branch=master#3a3a02beef60efb793bebe97f292f6ab2a8fd363"
 dependencies = [
  "bitflags 2.9.0",
  "bytes",
@@ -2099,7 +2099,7 @@ dependencies = [
 [[package]]
 name = "iced_debug"
 version = "0.14.0-dev"
-source = "git+https://github.com/iced-rs/iced?branch=master#7a97773f1796fa7889435c78305d287449dd05a4"
+source = "git+https://github.com/iced-rs/iced?branch=master#3a3a02beef60efb793bebe97f292f6ab2a8fd363"
 dependencies = [
  "iced_core",
  "iced_futures",
@@ -2109,7 +2109,7 @@ dependencies = [
 [[package]]
 name = "iced_dialog"
 version = "0.14.0-dev"
-source = "git+https://github.com/pml68/iced_dialog?branch=master#425b4817f3288b5da42b180c3ab4901034a773d5"
+source = "git+https://github.com/pml68/iced_dialog?branch=master#0ad1bef11d3180e569d84ab504343db7fcc5452a"
 dependencies = [
  "iced_core",
  "iced_widget",
@@ -2118,7 +2118,7 @@ dependencies = [
 [[package]]
 name = "iced_futures"
 version = "0.14.0-dev"
-source = "git+https://github.com/iced-rs/iced?branch=master#7a97773f1796fa7889435c78305d287449dd05a4"
+source = "git+https://github.com/iced-rs/iced?branch=master#3a3a02beef60efb793bebe97f292f6ab2a8fd363"
 dependencies = [
  "futures",
  "iced_core",
@@ -2132,7 +2132,7 @@ dependencies = [
 [[package]]
 name = "iced_graphics"
 version = "0.14.0-dev"
-source = "git+https://github.com/iced-rs/iced?branch=master#7a97773f1796fa7889435c78305d287449dd05a4"
+source = "git+https://github.com/iced-rs/iced?branch=master#3a3a02beef60efb793bebe97f292f6ab2a8fd363"
 dependencies = [
  "bitflags 2.9.0",
  "bytemuck",
@@ -2153,7 +2153,7 @@ dependencies = [
 [[package]]
 name = "iced_program"
 version = "0.14.0-dev"
-source = "git+https://github.com/iced-rs/iced?branch=master#7a97773f1796fa7889435c78305d287449dd05a4"
+source = "git+https://github.com/iced-rs/iced?branch=master#3a3a02beef60efb793bebe97f292f6ab2a8fd363"
 dependencies = [
  "iced_graphics",
  "iced_runtime",
@@ -2162,7 +2162,7 @@ dependencies = [
 [[package]]
 name = "iced_renderer"
 version = "0.14.0-dev"
-source = "git+https://github.com/iced-rs/iced?branch=master#7a97773f1796fa7889435c78305d287449dd05a4"
+source = "git+https://github.com/iced-rs/iced?branch=master#3a3a02beef60efb793bebe97f292f6ab2a8fd363"
 dependencies = [
  "iced_graphics",
  "iced_tiny_skia",
@@ -2174,7 +2174,7 @@ dependencies = [
 [[package]]
 name = "iced_runtime"
 version = "0.14.0-dev"
-source = "git+https://github.com/iced-rs/iced?branch=master#7a97773f1796fa7889435c78305d287449dd05a4"
+source = "git+https://github.com/iced-rs/iced?branch=master#3a3a02beef60efb793bebe97f292f6ab2a8fd363"
 dependencies = [
  "bytes",
  "iced_core",
@@ -2187,7 +2187,7 @@ dependencies = [
 [[package]]
 name = "iced_tiny_skia"
 version = "0.14.0-dev"
-source = "git+https://github.com/iced-rs/iced?branch=master#7a97773f1796fa7889435c78305d287449dd05a4"
+source = "git+https://github.com/iced-rs/iced?branch=master#3a3a02beef60efb793bebe97f292f6ab2a8fd363"
 dependencies = [
  "bytemuck",
  "cosmic-text",
@@ -2203,7 +2203,7 @@ dependencies = [
 [[package]]
 name = "iced_wgpu"
 version = "0.14.0-dev"
-source = "git+https://github.com/iced-rs/iced?branch=master#7a97773f1796fa7889435c78305d287449dd05a4"
+source = "git+https://github.com/iced-rs/iced?branch=master#3a3a02beef60efb793bebe97f292f6ab2a8fd363"
 dependencies = [
  "bitflags 2.9.0",
  "bytemuck",
@@ -2223,7 +2223,7 @@ dependencies = [
 [[package]]
 name = "iced_widget"
 version = "0.14.0-dev"
-source = "git+https://github.com/iced-rs/iced?branch=master#7a97773f1796fa7889435c78305d287449dd05a4"
+source = "git+https://github.com/iced-rs/iced?branch=master#3a3a02beef60efb793bebe97f292f6ab2a8fd363"
 dependencies = [
  "iced_renderer",
  "iced_runtime",
@@ -2238,7 +2238,7 @@ dependencies = [
 [[package]]
 name = "iced_winit"
 version = "0.14.0-dev"
-source = "git+https://github.com/iced-rs/iced?branch=master#7a97773f1796fa7889435c78305d287449dd05a4"
+source = "git+https://github.com/iced-rs/iced?branch=master#3a3a02beef60efb793bebe97f292f6ab2a8fd363"
 dependencies = [
  "iced_debug",
  "iced_program",
@@ -3028,9 +3028,9 @@ dependencies = [
 
 [[package]]
 name = "multimap"
-version = "0.10.0"
+version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "defc4c55412d89136f966bbb339008b474350e5e6e78d2714439c386b3137a03"
+checksum = "1d87ecb2933e8aeadb3e3a02b828fed80a7528047e68b4f424523a0981a3a084"
 
 [[package]]
 name = "mutate_once"
@@ -3854,7 +3854,7 @@ checksum = "94e851c7654eed9e68d7d27164c454961a616cf8c203d500607ef22c737b51bb"
 [[package]]
 name = "presage"
 version = "0.7.0-dev"
-source = "git+https://github.com/whisperfish/presage#4d3830a8af73af33ac61ce7a923f9a745a2eee25"
+source = "git+https://github.com/whisperfish/presage#d3a760088617b657b41ccd4f43e4629e3c3188ac"
 dependencies = [
  "base64",
  "bytes",
@@ -3876,7 +3876,7 @@ dependencies = [
 [[package]]
 name = "presage-store-cipher"
 version = "0.1.0"
-source = "git+https://github.com/whisperfish/presage#4d3830a8af73af33ac61ce7a923f9a745a2eee25"
+source = "git+https://github.com/whisperfish/presage#d3a760088617b657b41ccd4f43e4629e3c3188ac"
 dependencies = [
  "blake3",
  "chacha20poly1305",
@@ -3893,7 +3893,7 @@ dependencies = [
 [[package]]
 name = "presage-store-sled"
 version = "0.6.0-dev"
-source = "git+https://github.com/whisperfish/presage#4d3830a8af73af33ac61ce7a923f9a745a2eee25"
+source = "git+https://github.com/whisperfish/presage#d3a760088617b657b41ccd4f43e4629e3c3188ac"
 dependencies = [
  "async-trait",
  "base64",
@@ -5089,9 +5089,9 @@ dependencies = [
 
 [[package]]
 name = "tempfile"
-version = "3.19.1"
+version = "3.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7437ac7763b9b123ccf33c338a5cc1bac6f69b45a136c19bdd8a65e3916435bf"
+checksum = "e8a64e3985349f2441a1a9ef0b853f869006c3855f2cda6862a94d26ebb9d6a1"
 dependencies = [
  "fastrand",
  "getrandom 0.3.3",
