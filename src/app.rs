@@ -161,6 +161,7 @@ impl App {
         contacts.sort_by_key(|c| Reverse(self.chats[c].last().map(|c| c.timestamp)));
         let contacts = column![
             "Chats",
+            horizontal_rule(11),
             scrollable(
                 column(contacts.into_iter().map(|c| {
                     button(c.as_iced_widget())
@@ -173,8 +174,7 @@ impl App {
             )
             .spacing(5)
         ]
-        .padding(padding::all(5).right(0))
-        .spacing(5);
+        .padding(padding::all(5).right(0));
 
         let chat = if let Some(((tz, now), open_chat)) =
             self.tz.as_ref().zip(self.now).zip(self.open_chat.as_ref())
