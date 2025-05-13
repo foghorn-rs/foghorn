@@ -14,6 +14,7 @@ use iced::{
     widget::{button, column, container, horizontal_space, qr_code, scrollable},
 };
 use jiff::{Timestamp, tz::TimeZone};
+use notify_rust::Notification;
 use presage::libsignal_service::provisioning::ProvisioningError;
 use std::{cmp::Reverse, collections::HashMap, sync::Arc, time::Duration};
 
@@ -119,7 +120,19 @@ impl App {
                             message.clone(),
                         );
                     })
-                    .or_insert_with(|| vec![message]);
+                    .or_insert_with(|| vec![message.clone()]);
+
+                return Task::future(async move {
+                    // FIXME: don't show notifs for messages loaded from store
+                    // FIXME: don't show notifs for messages we sent ourselves
+                    Notification::new()
+                        .summary(&message.sender.name)
+                        .body(message.body.as_deref().unwrap_or_default())
+                        .show_async()
+                        .await
+                        .unwrap();
+                })
+                .discard();
             }
             Message::CloseDialog => self.dialog.close(),
             Message::OpenChat(open_chat) => self.open_chat = Some(open_chat),
