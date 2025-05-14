@@ -140,6 +140,13 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Event>) {
                 task::spawn_local(async move {
                     let cache = Rc::new(RefCell::new(HashMap::new()));
 
+                    {
+                        let mut manager = manager.clone();
+                        task::spawn_local(async move {
+                            Box::pin(manager.request_contacts()).await.unwrap();
+                        });
+                    }
+
                     for thread in manager
                         .store()
                         .contacts()
