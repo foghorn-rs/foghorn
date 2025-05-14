@@ -1,5 +1,5 @@
-use crate::{manager_manager::RegisteredManager, widget::Span};
-use iced::{Font, font, widget::image};
+use crate::{manager_manager::RegisteredManager, widget::SignalSpan};
+use iced::widget::image;
 use jiff::Timestamp;
 use presage::{
     libsignal_service::{
@@ -111,7 +111,7 @@ impl From<AttachmentPointer> for Attachment {
 #[derive(Clone, Debug)]
 pub struct Message {
     pub timestamp: Timestamp,
-    pub body: Option<Vec<Span<'static>>>,
+    pub body: Option<Vec<SignalSpan<'static>>>,
     pub attachments: Vec<Attachment>,
     pub sticker: Option<Attachment>,
     pub sender: Contact,
@@ -148,7 +148,7 @@ impl Message {
 #[derive(Clone, Debug)]
 pub struct Quote {
     pub timestamp: Timestamp,
-    pub body: Option<Vec<Span<'static>>>,
+    pub body: Option<Vec<SignalSpan<'static>>>,
     pub sender: Option<Contact>,
 }
 
@@ -260,7 +260,7 @@ pub async fn decode_content(
 fn body_ranges_to_spans(
     body: Option<String>,
     body_ranges: Vec<BodyRange>,
-) -> Option<Vec<Span<'static>>> {
+) -> Option<Vec<SignalSpan<'static>>> {
     let body = body?;
 
     let mut flags = vec![0u8; body.len()];
@@ -270,69 +270,38 @@ fn body_ranges_to_spans(
         let length = range.length() as usize;
         let end = start + length;
 
-        let style = range.associated_value.as_ref().map_or(0, |value| {
-            (match value {
-                AssociatedValue::MentionAci(_) => 0,
-                AssociatedValue::Style(style) => match style {
-                    style if (0..=5).contains(style) => *style,
-                    style => panic!("Unknown message Style value given: {style}"),
-                },
-            }) as u8
-        });
+        let Some(style) = range
+            .associated_value
+            .as_ref()
+            .and_then(|value| match value {
+                AssociatedValue::MentionAci(_) => Some(0),
+                AssociatedValue::Style(style) => (1..=5).contains(style).then_some(*style),
+            })
+        else {
+            continue;
+        };
 
         for flag in flags.iter_mut().take(end).skip(start) {
             *flag |= 1 << style;
         }
     }
 
-    let mut spans: Vec<Span<'static>> = vec![];
+    let mut spans: Vec<SignalSpan<'static>> = vec![];
     let mut last_flag = flags[0];
     let mut in_progress_span = String::new();
 
     for (flag, c) in flags.iter().zip(body.chars()) {
         if last_flag != *flag {
-            spans.push(span_from_flags(last_flag, &mut in_progress_span));
+            spans.push(SignalSpan::new(std::mem::take(&mut in_progress_span)).flags(last_flag));
         }
 
         last_flag = *flag;
         in_progress_span.push(c);
     }
 
-    spans.push(span_from_flags(last_flag, &mut in_progress_span));
+    spans.push(SignalSpan::new(std::mem::take(&mut in_progress_span)).flags(last_flag));
 
     Some(spans)
-}
-
-fn span_from_flags(last_flag: u8, in_progress_span: &mut String) -> Span<'static> {
-    let get_bit = |flag: u8, i: usize| (flag & (1 << i)) != 0;
-
-    let mut span = Span::new(std::mem::take(in_progress_span));
-
-    if get_bit(last_flag, 1) {
-        span.font = Some(Font {
-            weight: font::Weight::Bold,
-            ..Font::DEFAULT
-        });
-    }
-
-    if get_bit(last_flag, 2) {
-        span.font = Some(Font {
-            style: font::Style::Italic,
-            ..span.font.unwrap_or(Font::DEFAULT)
-        });
-    }
-
-    span.spoiler = get_bit(last_flag, 3);
-    span.strikethrough = get_bit(last_flag, 4);
-
-    if get_bit(last_flag, 5) {
-        span.font = Some(Font {
-            family: font::Family::Monospace,
-            ..span.font.unwrap_or(Font::DEFAULT)
-        });
-    }
-
-    span
 }
 
 async fn get_group_cached(

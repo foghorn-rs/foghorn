@@ -1,26 +1,31 @@
 use iced::{
-    Color, Padding,
-    widget::text::{Fragment, IntoFragment},
+    Color, Font,
+    advanced::graphics::core::font,
+    font::{Family, Weight},
+    widget::text::{self, Fragment, IntoFragment},
 };
 use std::borrow::Cow;
 
+pub const MENTION: u8 = 1 << 0;
+pub const BOLD: u8 = 1 << 1;
+pub const ITALIC: u8 = 1 << 2;
+pub const SPOILER: u8 = 1 << 3;
+pub const STRIKETHROUGH: u8 = 1 << 4;
+pub const MONOSPACE: u8 = 1 << 5;
+
 /// A span of text.
 #[derive(Clone, Debug)]
-pub struct Span<'a, Link = (), Font = iced::Font> {
+pub struct SignalSpan<'a, Link = ()> {
     /// The [`Fragment`] of text.
     pub text: Fragment<'a>,
-    /// The font of the [`Span`].
-    pub font: Option<Font>,
-    /// The link of the [`Span`].
+    /// The flags of the [`SignalSpan`].
+    pub flags: u8,
+    /// The link of the [`SignalSpan`].
     pub link: Option<Link>,
-    /// Whether the [`Span`] should be struck through or not.
-    pub strikethrough: bool,
-    /// Whether the [`Span`] contains a spoiler.
-    pub spoiler: bool,
 }
 
-impl<'a, Link, Font> Span<'a, Link, Font> {
-    /// Creates a new [`Span`] of text with the given text fragment.
+impl<'a, Link> SignalSpan<'a, Link> {
+    /// Creates a new [`SignalSpan`] of text with the given text fragment.
     pub fn new(fragment: impl IntoFragment<'a>) -> Self {
         Self {
             text: fragment.into_fragment(),
@@ -28,55 +33,112 @@ impl<'a, Link, Font> Span<'a, Link, Font> {
         }
     }
 
-    /// Turns the [`Span`] into a static one.
-    pub fn into_static(self) -> Span<'static, Link, Font> {
-        Span {
+    /// Sets the flags of the [`SignalSpan`].
+    pub fn flags(mut self, flags: impl Into<u8>) -> Self {
+        self.flags = flags.into();
+        self
+    }
+
+    /// Sets the link of the [`SignalSpan`].
+    pub fn link(mut self, link: impl Into<Link>) -> Self {
+        self.link = Some(link.into());
+        self
+    }
+
+    /// Sets the link of the [`SignalSpan`], if any.
+    pub fn link_maybe(mut self, link: Option<impl Into<Link>>) -> Self {
+        self.link = link.map(Into::into);
+        self
+    }
+
+    /// Gets whether the [`SignalSpan`] has the `mention` flag set.
+    pub fn mention(&self) -> bool {
+        self.flags & MENTION != 0
+    }
+
+    /// Gets whether the [`SignalSpan`] has the `bold` flag set.
+    pub fn bold(&self) -> bool {
+        self.flags & BOLD != 0
+    }
+
+    /// Gets whether the [`SignalSpan`] has the `italic` flag set.
+    pub fn italic(&self) -> bool {
+        self.flags & ITALIC != 0
+    }
+
+    /// Gets whether the [`SignalSpan`] has the `spoiler` flag set.
+    pub fn spoiler(&self) -> bool {
+        self.flags & SPOILER != 0
+    }
+
+    /// Gets whether the [`SignalSpan`] has the `strikethrough` flag set.
+    pub fn strikethrough(&self) -> bool {
+        self.flags & STRIKETHROUGH != 0
+    }
+
+    /// Gets whether the [`SignalSpan`] has the `monospace` flag set.
+    pub fn monospace(&self) -> bool {
+        self.flags & MONOSPACE != 0
+    }
+
+    /// Turns the [`SignalSpan`] into a static one.
+    pub fn into_static(self) -> SignalSpan<'static, Link> {
+        SignalSpan {
             text: Cow::Owned(self.text.into_owned()),
-            font: self.font,
+            flags: self.flags,
             link: self.link,
-            strikethrough: self.strikethrough,
-            spoiler: self.spoiler,
         }
     }
 }
 
-impl<Link, Font> Default for Span<'_, Link, Font> {
+impl<Link> Default for SignalSpan<'_, Link> {
     fn default() -> Self {
         Self {
             text: Cow::default(),
-            font: None,
+            flags: 0,
             link: None,
-            strikethrough: false,
-            spoiler: false,
         }
     }
 }
 
-impl<'a, Link, Font> From<&'a str> for Span<'a, Link, Font> {
+impl<'a, Link> From<&'a str> for SignalSpan<'a, Link> {
     fn from(value: &'a str) -> Self {
-        Span::new(value)
+        SignalSpan::new(value)
     }
 }
 
-impl<Link, Font: PartialEq> PartialEq for Span<'_, Link, Font> {
+impl<Link> PartialEq for SignalSpan<'_, Link> {
     fn eq(&self, other: &Self) -> bool {
-        self.text == other.text && self.font == other.font
+        self.text == other.text && self.flags == other.flags
     }
 }
 
-impl<'a, Link, Font> From<Span<'a, Link, Font>> for iced::widget::text::Span<'a, Link, Font> {
-    fn from(value: Span<'a, Link, Font>) -> Self {
-        iced::widget::text::Span {
+impl<'a, Link> From<SignalSpan<'a, Link>> for text::Span<'a, Link, Font> {
+    fn from(value: SignalSpan<'a, Link>) -> Self {
+        text::Span {
+            font: Some(Font {
+                family: if value.monospace() {
+                    Family::Monospace
+                } else {
+                    Family::SansSerif
+                },
+                weight: if value.bold() {
+                    Weight::Bold
+                } else {
+                    Weight::Normal
+                },
+                style: if value.italic() {
+                    font::Style::Italic
+                } else {
+                    font::Style::Normal
+                },
+                ..Font::default()
+            }),
+            color: value.spoiler().then_some(Color::TRANSPARENT),
+            strikethrough: value.strikethrough(),
             text: value.text,
-            size: None,
-            line_height: None,
-            font: value.font,
-            color: value.spoiler.then_some(Color::TRANSPARENT),
             link: value.link,
-            highlight: None,
-            padding: Padding::default(),
-            underline: false,
-            strikethrough: value.strikethrough,
+            ..text::Span::default()
         }
     }
 }

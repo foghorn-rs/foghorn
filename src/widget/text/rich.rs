@@ -1,9 +1,13 @@
-use super::Span;
+use super::SignalSpan;
 use iced::{
-    self, Color, Element, Event, Length, Pixels, Point, Rectangle, Size, Theme, Vector,
+    self, Color, Element, Event, Font, Length, Pixels, Point, Rectangle, Renderer, Size, Theme,
+    Vector,
     advanced::{
-        self, Clipboard, Layout, Shell, Widget, layout, renderer,
-        text::Paragraph,
+        self, Clipboard, Layout, Renderer as _, Shell, Widget,
+        graphics::text::Paragraph,
+        layout,
+        renderer::{self, Quad},
+        text::{Paragraph as _, Renderer as _},
         widget::tree::{self, Tree},
     },
     alignment, border, mouse,
@@ -12,38 +16,30 @@ use iced::{
 
 /// A bunch of [`SignalRich`] text.
 #[expect(missing_debug_implementations)]
-pub struct Rich<'a, Link, Message, Theme = iced::Theme, Renderer = iced::Renderer>
-where
-    Link: Clone + 'static,
-    Theme: Catalog,
-    Renderer: advanced::text::Renderer,
-{
-    spans: Box<dyn AsRef<[Span<'a, Link, Renderer::Font>]> + 'a>,
+pub struct SignalRich<'a, Link, Message> {
+    spans: &'a [SignalSpan<'a, Link>],
     size: Option<Pixels>,
     line_height: LineHeight,
     width: Length,
     height: Length,
-    font: Option<Renderer::Font>,
+    font: Option<Font>,
     align_x: Alignment,
     align_y: alignment::Vertical,
     wrapping: Wrapping,
-    class: Theme::Class<'a>,
+    style: StyleFn<'a, Theme>,
     hovered_link: Option<usize>,
     hovered_spoiler: Option<usize>,
     on_link_click: Option<Box<dyn Fn(Link) -> Message + 'a>>,
 }
 
-impl<'a, Link, Message, Theme, Renderer> Rich<'a, Link, Message, Theme, Renderer>
+impl<'a, Link, Message> SignalRich<'a, Link, Message>
 where
     Link: Clone + 'static,
-    Theme: Catalog,
-    Renderer: advanced::text::Renderer,
-    Renderer::Font: 'a,
 {
-    /// Creates a new empty [`Rich`] text.
+    /// Creates a new empty [`SignalRich`] text.
     pub fn new() -> Self {
         Self {
-            spans: Box::new([]),
+            spans: &[],
             size: None,
             line_height: LineHeight::default(),
             width: Length::Shrink,
@@ -52,135 +48,118 @@ where
             align_x: Alignment::Default,
             align_y: alignment::Vertical::Top,
             wrapping: Wrapping::default(),
-            class: Theme::default(),
+            style: Box::new(default),
             hovered_link: None,
             hovered_spoiler: None,
             on_link_click: None,
         }
     }
 
-    /// Creates a new [`Rich`] text with the given text spans.
-    pub fn with_spans(spans: impl AsRef<[Span<'a, Link, Renderer::Font>]> + 'a) -> Self {
-        Self {
-            spans: Box::new(spans),
-            ..Self::new()
-        }
+    /// Sets the spans of the [`SignalRich`] text.
+    pub fn with_spans(mut self, spans: impl Into<&'a [SignalSpan<'a, Link>]>) -> Self {
+        self.spans = spans.into();
+        self
     }
 
     #[expect(clippy::same_name_method)]
-    /// Sets the default size of the [`Rich`] text.
+    /// Sets the default size of the [`SignalRich`] text.
     pub fn size(mut self, size: impl Into<Pixels>) -> Self {
         self.size = Some(size.into());
         self
     }
 
-    /// Sets the default [`LineHeight`] of the [`Rich`] text.
+    /// Sets the default [`LineHeight`] of the [`SignalRich`] text.
     pub fn line_height(mut self, line_height: impl Into<LineHeight>) -> Self {
         self.line_height = line_height.into();
         self
     }
 
-    /// Sets the default font of the [`Rich`] text.
-    pub fn font(mut self, font: impl Into<Renderer::Font>) -> Self {
+    /// Sets the default font of the [`SignalRich`] text.
+    pub fn font(mut self, font: impl Into<Font>) -> Self {
         self.font = Some(font.into());
         self
     }
 
-    /// Sets the width of the [`Rich`] text boundaries.
+    /// Sets the width of the [`SignalRich`] text boundaries.
     pub fn width(mut self, width: impl Into<Length>) -> Self {
         self.width = width.into();
         self
     }
 
-    /// Sets the height of the [`Rich`] text boundaries.
+    /// Sets the height of the [`SignalRich`] text boundaries.
     pub fn height(mut self, height: impl Into<Length>) -> Self {
         self.height = height.into();
         self
     }
 
-    /// Centers the [`Rich`] text, both horizontally and vertically.
+    /// Centers the [`SignalRich`] text, both horizontally and vertically.
     pub fn center(self) -> Self {
         self.align_x(alignment::Horizontal::Center)
             .align_y(alignment::Vertical::Center)
     }
 
-    /// Sets the [`alignment::Horizontal`] of the [`Rich`] text.
+    /// Sets the [`alignment::Horizontal`] of the [`SignalRich`] text.
     pub fn align_x(mut self, alignment: impl Into<Alignment>) -> Self {
         self.align_x = alignment.into();
         self
     }
 
-    /// Sets the [`alignment::Vertical`] of the [`Rich`] text.
+    /// Sets the [`alignment::Vertical`] of the [`SignalRich`] text.
     pub fn align_y(mut self, alignment: impl Into<alignment::Vertical>) -> Self {
         self.align_y = alignment.into();
         self
     }
 
-    /// Sets the [`Wrapping`] strategy of the [`Rich`] text.
-    pub fn wrapping(mut self, wrapping: Wrapping) -> Self {
-        self.wrapping = wrapping;
+    /// Sets the [`Wrapping`] strategy of the [`SignalRich`] text.
+    pub fn wrapping(mut self, wrapping: impl Into<Wrapping>) -> Self {
+        self.wrapping = wrapping.into();
         self
     }
 
-    /// Sets the message that will be produced when a link of the [`Rich`] text
+    /// Sets the message that will be produced when a link of the [`SignalRich`] text
     /// is clicked.
     pub fn on_link_click(mut self, on_link_clicked: impl Fn(Link) -> Message + 'a) -> Self {
         self.on_link_click = Some(Box::new(on_link_clicked));
         self
     }
 
-    /// Sets the default style of the [`Rich`] text.
-    pub fn style(mut self, style: impl Fn(&Theme) -> Style + 'a) -> Self
-    where
-        Theme::Class<'a>: From<StyleFn<'a, Theme>>,
-    {
-        self.class = (Box::new(style) as StyleFn<'a, Theme>).into();
-        self
-    }
-
-    /// Sets the default style class of the [`Rich`] text.
-    pub fn class(mut self, class: impl Into<Theme::Class<'a>>) -> Self {
-        self.class = class.into();
+    /// Sets the style of the [`SignalRich`] text.
+    pub fn style(mut self, style: impl Fn(&Theme) -> Style + 'a) -> Self {
+        self.style = Box::new(style);
         self
     }
 }
 
-impl<'a, Link, Message, Theme, Renderer> Default for Rich<'a, Link, Message, Theme, Renderer>
+impl<Link, Message> Default for SignalRich<'_, Link, Message>
 where
-    Link: Clone + 'a,
-    Theme: Catalog,
-    Renderer: advanced::text::Renderer,
-    Renderer::Font: 'a,
+    Link: Clone + 'static,
 {
     fn default() -> Self {
         Self::new()
     }
 }
 
-struct State<Link, P: Paragraph> {
-    spans: Vec<Span<'static, Link, P::Font>>,
+struct State<Link> {
+    spans: Vec<SignalSpan<'static, Link>>,
     span_pressed: Option<usize>,
     revealed_spoilers: Vec<usize>,
-    paragraph: P,
+    paragraph: Paragraph,
 }
 
-impl<Link, Message, Theme, Renderer> Widget<Message, Theme, Renderer>
-    for Rich<'_, Link, Message, Theme, Renderer>
+impl<Link, Message> Widget<Message, Theme, Renderer> for SignalRich<'_, Link, Message>
 where
     Link: Clone + 'static,
-    Theme: Catalog,
-    Renderer: advanced::text::Renderer,
 {
     fn tag(&self) -> tree::Tag {
-        tree::Tag::of::<State<Link, Renderer::Paragraph>>()
+        tree::Tag::of::<State<Link>>()
     }
 
     fn state(&self) -> tree::State {
-        tree::State::new(State::<Link, _> {
+        tree::State::new(State::<Link> {
             spans: vec![],
             span_pressed: None,
             revealed_spoilers: vec![],
-            paragraph: Renderer::Paragraph::default(),
+            paragraph: Paragraph::default(),
         })
     }
 
@@ -198,13 +177,12 @@ where
         limits: &layout::Limits,
     ) -> layout::Node {
         layout(
-            tree.state
-                .downcast_mut::<State<Link, Renderer::Paragraph>>(),
+            tree.state.downcast_mut::<State<Link>>(),
             renderer,
             limits,
             self.width,
             self.height,
-            self.spans.as_ref().as_ref(),
+            self.spans,
             self.line_height,
             self.size,
             self.font,
@@ -228,30 +206,28 @@ where
             return;
         }
 
-        let state = tree
-            .state
-            .downcast_ref::<State<Link, Renderer::Paragraph>>();
+        let state = tree.state.downcast_ref::<State<Link>>();
 
-        let style = theme.style(&self.class);
+        let style = (self.style)(theme);
 
         for (index, span) in self.spans.as_ref().as_ref().iter().enumerate() {
-            let is_hovered_link = self.on_link_click.is_some() && Some(index) == self.hovered_link;
-            let is_hovered_spoiler = Some(index) == self.hovered_spoiler;
-            let is_revealed_spoiler = state.revealed_spoilers.contains(&index);
+            let link_hovered = self.on_link_click.is_some() && Some(index) == self.hovered_link;
+            let spoiler_hovered = Some(index) == self.hovered_spoiler;
+            let spoiler_revealed = state.revealed_spoilers.contains(&index);
 
-            if span.strikethrough || span.spoiler || is_hovered_link || is_hovered_spoiler {
+            if span.strikethrough() || span.spoiler() || link_hovered || spoiler_hovered {
                 let translation = layout.position() - Point::ORIGIN;
                 let regions = state.paragraph.span_bounds(index);
 
-                if span.spoiler && !is_revealed_spoiler {
+                if span.spoiler() && !spoiler_revealed {
                     for bounds in &regions {
                         renderer.fill_quad(
-                            renderer::Quad {
+                            Quad {
                                 bounds: bounds.shrink([2, 0]) + translation,
                                 border: border::rounded(5),
                                 ..Default::default()
                             },
-                            if is_hovered_spoiler {
+                            if spoiler_hovered {
                                 style.hovered_spoiler
                             } else {
                                 style.spoiler
@@ -260,17 +236,17 @@ where
                     }
                 }
 
-                if span.strikethrough || is_hovered_link {
+                if span.strikethrough() || link_hovered {
                     let size = self.size.unwrap_or_else(|| renderer.default_size());
                     let line_height = self.line_height.to_absolute(size);
                     let color = style.color.unwrap_or(defaults.text_color);
                     let baseline =
                         translation + Vector::new(0.0, size.0 + (line_height.0 - size.0) / 2.0);
 
-                    if is_hovered_link {
+                    if link_hovered {
                         for bounds in &regions {
                             renderer.fill_quad(
-                                renderer::Quad {
+                                Quad {
                                     bounds: Rectangle::new(
                                         bounds.position() + baseline
                                             - Vector::new(0.0, size.0 * 0.08),
@@ -283,10 +259,10 @@ where
                         }
                     }
 
-                    if span.strikethrough {
+                    if span.strikethrough() {
                         for bounds in &regions {
                             renderer.fill_quad(
-                                renderer::Quad {
+                                Quad {
                                     bounds: Rectangle::new(
                                         bounds.position() + baseline
                                             - Vector::new(0.0, size.0 / 2.0),
@@ -330,15 +306,13 @@ where
         self.hovered_spoiler = None;
 
         if let Some(position) = cursor.position_in(layout.bounds()) {
-            let state = tree
-                .state
-                .downcast_ref::<State<Link, Renderer::Paragraph>>();
+            let state = tree.state.downcast_ref::<State<Link>>();
 
             if let Some(index) = state.paragraph.hit_span(position) {
                 if let Some(span) = self.spans.as_ref().as_ref().get(index) {
                     if span.link.is_some() {
                         self.hovered_link = Some(index);
-                    } else if span.spoiler && !state.revealed_spoilers.contains(&index) {
+                    } else if span.spoiler() && !state.revealed_spoilers.contains(&index) {
                         self.hovered_spoiler = Some(index);
                     }
                 }
@@ -353,9 +327,7 @@ where
 
         match event {
             Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => {
-                let state = tree
-                    .state
-                    .downcast_mut::<State<Link, Renderer::Paragraph>>();
+                let state = tree.state.downcast_mut::<State<Link>>();
 
                 if self.hovered_link.is_some() {
                     state.span_pressed = self.hovered_link;
@@ -366,9 +338,7 @@ where
                 }
             }
             Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)) => {
-                let state = tree
-                    .state
-                    .downcast_mut::<State<Link, Renderer::Paragraph>>();
+                let state = tree.state.downcast_mut::<State<Link>>();
 
                 match state.span_pressed {
                     Some(span) if Some(span) == self.hovered_link => {
@@ -386,10 +356,10 @@ where
                     Some(span) if Some(span) == self.hovered_spoiler => {
                         state.revealed_spoilers.push(span);
 
-                        refresh_spans::<_, Renderer>(
+                        refresh_spans(
                             state,
                             layout.bounds().size(),
-                            self.spans.as_ref().as_ref(),
+                            self.spans,
                             self.line_height,
                             self.size.unwrap_or_else(|| renderer.default_size()),
                             self.font.unwrap_or_else(|| renderer.default_font()),
@@ -425,23 +395,22 @@ where
     }
 }
 
-fn layout<Link, Renderer>(
-    state: &mut State<Link, Renderer::Paragraph>,
+fn layout<Link>(
+    state: &mut State<Link>,
     renderer: &Renderer,
     limits: &layout::Limits,
     width: Length,
     height: Length,
-    spans: &[Span<'_, Link, Renderer::Font>],
+    spans: &[SignalSpan<'_, Link>],
     line_height: LineHeight,
     size: Option<Pixels>,
-    font: Option<Renderer::Font>,
+    font: Option<Font>,
     align_x: Alignment,
     align_y: alignment::Vertical,
     wrapping: Wrapping,
 ) -> layout::Node
 where
     Link: Clone,
-    Renderer: advanced::text::Renderer,
 {
     layout::sized(limits, width, height, |limits| {
         let bounds = limits.max();
@@ -466,7 +435,7 @@ where
                     state.paragraph.resize(bounds);
                 }
                 advanced::text::Difference::Shape => {
-                    refresh_spans::<_, Renderer>(
+                    refresh_spans(
                         state,
                         limits.max(),
                         spans,
@@ -480,7 +449,7 @@ where
                 }
             }
         } else {
-            refresh_spans::<_, Renderer>(
+            refresh_spans(
                 state,
                 limits.max(),
                 spans,
@@ -497,19 +466,18 @@ where
     })
 }
 
-fn refresh_spans<Link, Renderer>(
-    state: &mut State<Link, Renderer::Paragraph>,
+fn refresh_spans<Link>(
+    state: &mut State<Link>,
     bounds: Size,
-    spans: &[Span<'_, Link, Renderer::Font>],
+    spans: &[SignalSpan<'_, Link>],
     line_height: LineHeight,
     size: Pixels,
-    font: Renderer::Font,
+    font: Font,
     align_x: Alignment,
     align_y: alignment::Vertical,
     wrapping: Wrapping,
 ) where
     Link: Clone,
-    Renderer: advanced::text::Renderer,
 {
     let mut iced_spans: Vec<_> = spans.iter().cloned().map(text::Span::from).collect();
     for &span in &state.revealed_spoilers {
@@ -528,20 +496,18 @@ fn refresh_spans<Link, Renderer>(
         wrapping,
     };
 
-    state.paragraph = Renderer::Paragraph::with_spans(text_with_spans);
-    state.spans = spans.iter().cloned().map(Span::into_static).collect();
+    state.paragraph = Paragraph::with_spans(text_with_spans);
+    state.spans = spans.iter().cloned().map(SignalSpan::into_static).collect();
 }
 
-fn draw<Renderer>(
+fn draw(
     renderer: &mut Renderer,
     style: &renderer::Style,
     bounds: Rectangle,
-    paragraph: &Renderer::Paragraph,
+    paragraph: &Paragraph,
     appearance: Style,
     viewport: &Rectangle,
-) where
-    Renderer: advanced::text::Renderer,
-{
+) {
     let anchor = bounds.anchor(
         paragraph.min_bounds(),
         paragraph.align_x(),
@@ -556,28 +522,13 @@ fn draw<Renderer>(
     );
 }
 
-impl<'a, Link, Message, Theme, Renderer> FromIterator<Span<'a, Link, Renderer::Font>>
-    for Rich<'a, Link, Message, Theme, Renderer>
-where
-    Link: Clone + 'a,
-    Theme: Catalog,
-    Renderer: advanced::text::Renderer,
-    Renderer::Font: 'a,
-{
-    fn from_iter<T: IntoIterator<Item = Span<'a, Link, Renderer::Font>>>(spans: T) -> Self {
-        Self::with_spans(spans.into_iter().collect::<Vec<_>>())
-    }
-}
-
-impl<'a, Link, Message, Theme, Renderer> From<Rich<'a, Link, Message, Theme, Renderer>>
+impl<'a, Link, Message> From<SignalRich<'a, Link, Message>>
     for Element<'a, Message, Theme, Renderer>
 where
+    Link: Clone + 'static,
     Message: 'a,
-    Link: Clone + 'a,
-    Theme: Catalog + 'a,
-    Renderer: advanced::text::Renderer + 'a,
 {
-    fn from(text: Rich<'a, Link, Message, Theme, Renderer>) -> Self {
+    fn from(text: SignalRich<'a, Link, Message>) -> Self {
         Element::new(text)
     }
 }
@@ -595,34 +546,10 @@ pub struct Style {
     pub hovered_spoiler: Color,
 }
 
-/// The theme catalog of a [`Text`].
-pub trait Catalog: Sized {
-    /// The item class of this [`Catalog`].
-    type Class<'a>;
-
-    /// The default class produced by this [`Catalog`].
-    fn default<'a>() -> Self::Class<'a>;
-
-    /// The [`Style`] of a class with the given status.
-    fn style(&self, item: &Self::Class<'_>) -> Style;
-}
-
 /// A styling function for a [`Text`].
 ///
 /// This is just a boxed closure: `Fn(&Theme, Status) -> Style`.
 pub type StyleFn<'a, Theme> = Box<dyn Fn(&Theme) -> Style + 'a>;
-
-impl Catalog for Theme {
-    type Class<'a> = StyleFn<'a, Self>;
-
-    fn default<'a>() -> Self::Class<'a> {
-        Box::new(default)
-    }
-
-    fn style(&self, class: &Self::Class<'_>) -> Style {
-        class(self)
-    }
-}
 
 pub fn default(theme: &Theme) -> Style {
     let palette = theme.extended_palette();

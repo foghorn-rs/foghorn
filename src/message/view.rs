@@ -1,5 +1,5 @@
 use super::{Chat, Message, Quote};
-use crate::widget::Rich;
+use crate::widget::SignalRich;
 use iced::{
     Alignment, Element, Fill, Shrink,
     border::{self, radius},
@@ -48,7 +48,8 @@ impl Quote {
         let content = [
             Some(text(head).size(10).into()),
             self.body.as_deref().map(|body| {
-                Rich::with_spans(body)
+                SignalRich::new()
+                    .with_spans(body)
                     .wrapping(Wrapping::WordOrGlyph)
                     .into()
             }),
@@ -84,7 +85,8 @@ impl Message {
             self.quote.as_ref().map(|_| Space::with_height(10).into()),
             Some(text(head).size(10).into()),
             self.body.as_deref().map(|body| {
-                Rich::with_spans(body)
+                SignalRich::new()
+                    .with_spans(body)
                     .wrapping(Wrapping::WordOrGlyph)
                     .into()
             }),
