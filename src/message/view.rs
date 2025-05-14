@@ -57,7 +57,7 @@ impl Message {
 
         let content = [
             Some(text(head).size(10).into()),
-            self.body.as_ref().map(|body| {
+            self.body.as_deref().map(|body| {
                 Rich::with_spans(body)
                     .wrapping(Wrapping::WordOrGlyph)
                     .into()

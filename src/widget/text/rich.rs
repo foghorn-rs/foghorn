@@ -420,7 +420,7 @@ where
                             .as_ref()
                             .get(span)
                             .and_then(|span| span.link.clone())
-                            .zip(self.on_link_click.as_ref())
+                            .zip(self.on_link_click.as_deref())
                         {
                             shell.publish(on_link_clicked(link));
                         }
