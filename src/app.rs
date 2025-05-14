@@ -124,27 +124,27 @@ impl App {
                     })
                     .or_insert_with(|| vec![message.clone()]);
 
-                return Task::future(async move {
-                    // FIXME: don't show notifs for messages loaded from store
-                    // FIXME: don't show notifs for messages we sent ourselves
-                    _ = Notification::new()
-                        .summary(&message.sender.name)
-                        .body(
-                            message
-                                .body
-                                .map(|vec| {
-                                    vec.iter()
-                                        .map(|span| span.text.as_ref())
-                                        .collect::<Vec<&str>>()
-                                        .join("")
-                                })
-                                .unwrap_or_default()
-                                .as_str(),
-                        )
-                        .show_async()
-                        .await;
-                })
-                .discard();
+                if !message.sender.is_self && !message.is_from_store {
+                    return Task::future(async move {
+                        _ = Notification::new()
+                            .summary(&message.sender.name)
+                            .body(
+                                message
+                                    .body
+                                    .map(|vec| {
+                                        vec.iter()
+                                            .map(|span| span.text.as_ref())
+                                            .collect::<Vec<&str>>()
+                                            .join("")
+                                    })
+                                    .unwrap_or_default()
+                                    .as_str(),
+                            )
+                            .show_async()
+                            .await;
+                    })
+                    .discard();
+                }
             }
             Message::CloseDialog => self.dialog.close(),
             Message::OpenChat(open_chat) => self.open_chat = Some(open_chat),

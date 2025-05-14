@@ -1,9 +1,9 @@
-use super::{Chat, Message};
+use super::{Chat, Message, Quote};
 use crate::widget::Rich;
 use iced::{
     Alignment, Element, Fill, Shrink,
     border::{self, radius},
-    widget::{column, container, horizontal_space, image, row, text, text::Wrapping},
+    widget::{Space, column, container, horizontal_space, image, row, text, text::Wrapping},
 };
 use jiff::{Span, Timestamp, Unit, fmt::friendly::SpanPrinter, tz::TimeZone};
 
@@ -34,6 +34,37 @@ impl Chat {
     }
 }
 
+impl Quote {
+    pub fn as_iced_widget<'a, M: 'a>(&'a self) -> Element<'a, M> {
+        let content = [
+            self.sender
+                .clone()
+                .map(|sender| text(sender.name).size(10).into()),
+            self.body.as_deref().map(|body| {
+                Rich::with_spans(body)
+                    .wrapping(Wrapping::WordOrGlyph)
+                    .into()
+            }),
+        ];
+
+        let content = column(content.into_iter().flatten());
+
+        container(content)
+            .max_width(650)
+            .padding(10)
+            .style(|t: &iced::Theme| {
+                let pair = t.extended_palette().primary.weak;
+                container::Style {
+                    background: Some(pair.color.into()),
+                    text_color: Some(pair.text),
+                    border: border::rounded(5),
+                    ..Default::default()
+                }
+            })
+            .into()
+    }
+}
+
 impl Message {
     pub fn as_iced_widget<'a, M: 'a>(&'a self, now: Timestamp, tz: &TimeZone) -> Element<'a, M> {
         let timestamp = self.timestamp.to_zoned(tz.clone());
@@ -56,6 +87,8 @@ impl Message {
         let head = self.sender.name.clone() + ", " + &timestamp;
 
         let content = [
+            self.quote.as_ref().map(Quote::as_iced_widget),
+            Some(Space::with_height(10).into()),
             Some(text(head).size(10).into()),
             self.body.as_deref().map(|body| {
                 Rich::with_spans(body)

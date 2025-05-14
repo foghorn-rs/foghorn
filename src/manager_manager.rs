@@ -179,7 +179,7 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Event>) {
                             let mut c = c.clone();
                             task::spawn_local(async move {
                                 if let Some(message) =
-                                    decode_content(message, &mut manager, &cache).await
+                                    decode_content(message, &mut manager, &cache, true).await
                                 {
                                     c.send(message).await.unwrap();
                                 }
@@ -201,7 +201,7 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Event>) {
                             let mut c = c.clone();
                             task::spawn_local(async move {
                                 if let Some(message) =
-                                    decode_content(*message, &mut manager, &cache).await
+                                    decode_content(*message, &mut manager, &cache, false).await
                                 {
                                     c.send(message).await.unwrap();
                                 }

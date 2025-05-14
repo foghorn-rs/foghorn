@@ -116,6 +116,7 @@ pub struct Message {
     pub sticker: Option<Attachment>,
     pub sender: Contact,
     pub quote: Option<Quote>,
+    pub is_from_store: bool,
 }
 
 impl Message {
@@ -128,6 +129,7 @@ impl Message {
         quote: Option<data_message::Quote>,
         cache: &RefCell<HashMap<Thread, Chat>>,
         body_ranges: Vec<BodyRange>,
+        is_from_store: bool,
     ) -> Option<Self> {
         Some(Self {
             timestamp: Timestamp::from_millisecond(timestamp as i64).unwrap(),
@@ -138,6 +140,7 @@ impl Message {
                 .and_then(|sticker| sticker.data)
                 .map(Attachment::from),
             quote: quote.map(|quote| Quote::new(quote, cache)),
+            is_from_store,
         })
     }
 }
@@ -166,6 +169,7 @@ pub async fn decode_content(
     content: Content,
     manager: &mut RegisteredManager,
     cache: &RefCell<HashMap<Thread, Chat>>,
+    is_from_store: bool,
 ) -> Option<(Chat, Message)> {
     match (content.metadata, content.body) {
         (
@@ -208,6 +212,7 @@ pub async fn decode_content(
                 quote,
                 cache,
                 body_ranges,
+                is_from_store,
             )?;
 
             Some((chat, message))
@@ -243,6 +248,7 @@ pub async fn decode_content(
                 quote,
                 cache,
                 body_ranges,
+                is_from_store,
             )?;
 
             Some((chat, message))
