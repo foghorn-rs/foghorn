@@ -5,7 +5,7 @@ use iced::{
     border::{self, radius},
     widget::{Space, column, container, horizontal_space, image, row, text, text::Wrapping},
 };
-use jiff::{Span, Timestamp, Unit, fmt::friendly::SpanPrinter, tz::TimeZone};
+use jiff::{Span, Unit, Zoned, fmt::friendly::SpanPrinter, tz::TimeZone};
 
 impl Chat {
     pub fn as_iced_widget<'a, M: 'a>(&'a self) -> Element<'a, M> {
@@ -35,11 +35,18 @@ impl Chat {
 }
 
 impl Quote {
-    pub fn as_iced_widget<'a, M: 'a>(&'a self) -> Element<'a, M> {
+    pub fn as_iced_widget<'a, M: 'a>(&'a self, now: &Zoned, tz: &TimeZone) -> Element<'a, M> {
+        let timestamp = format_zoned(&self.timestamp.to_zoned(tz.clone()), now);
+
+        let head = self
+            .sender
+            .as_ref()
+            .map(|sender| sender.name.clone() + ", ")
+            .unwrap_or_default()
+            + &timestamp;
+
         let content = [
-            self.sender
-                .clone()
-                .map(|sender| text(sender.name).size(10).into()),
+            Some(text(head).size(10).into()),
             self.body.as_deref().map(|body| {
                 Rich::with_spans(body)
                     .wrapping(Wrapping::WordOrGlyph)
@@ -50,7 +57,6 @@ impl Quote {
         let content = column(content.into_iter().flatten());
 
         container(content)
-            .max_width(650)
             .padding(10)
             .style(|t: &iced::Theme| {
                 let pair = t.extended_palette().primary.weak;
@@ -66,28 +72,15 @@ impl Quote {
 }
 
 impl Message {
-    pub fn as_iced_widget<'a, M: 'a>(&'a self, now: Timestamp, tz: &TimeZone) -> Element<'a, M> {
-        let timestamp = self.timestamp.to_zoned(tz.clone());
-        let now = now.to_zoned(tz.clone());
-
-        let timestamp = if timestamp.date() == now.date() {
-            let diff = timestamp.since(&now).unwrap().round(Unit::Minute).unwrap();
-
-            if diff.is_zero() {
-                "now".to_owned()
-            } else {
-                SpanPrinter::new().span_to_string(&diff)
-            }
-        } else if timestamp.date() == now.date() - Span::new().days(1) {
-            timestamp.strftime("yesterday at %H:%M").to_string()
-        } else {
-            timestamp.strftime("%d.%m.%Y at %H:%M").to_string()
-        };
+    pub fn as_iced_widget<'a, M: 'a>(&'a self, now: &Zoned, tz: &TimeZone) -> Element<'a, M> {
+        let timestamp = format_zoned(&self.timestamp.to_zoned(tz.clone()), now);
 
         let head = self.sender.name.clone() + ", " + &timestamp;
 
         let content = [
-            self.quote.as_ref().map(Quote::as_iced_widget),
+            self.quote
+                .as_ref()
+                .map(|quote| quote.as_iced_widget(now, tz)),
             self.quote.as_ref().map(|_| Space::with_height(10).into()),
             Some(text(head).size(10).into()),
             self.body.as_deref().map(|body| {
@@ -129,5 +122,21 @@ impl Message {
             .height(Shrink)
             .spacing(5)
             .into()
+    }
+}
+
+fn format_zoned(timestamp: &Zoned, now: &Zoned) -> String {
+    if timestamp.date() == now.date() {
+        let diff = timestamp.since(now).unwrap().round(Unit::Minute).unwrap();
+
+        if diff.is_zero() {
+            "now".to_owned()
+        } else {
+            SpanPrinter::new().span_to_string(&diff)
+        }
+    } else if timestamp.date() == now.date() - Span::new().days(1) {
+        timestamp.strftime("yesterday at %H:%M").to_string()
+    } else {
+        timestamp.strftime("%d.%m.%Y at %H:%M").to_string()
     }
 }

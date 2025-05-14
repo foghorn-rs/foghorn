@@ -179,6 +179,8 @@ impl App {
         let chat = if let Some(((tz, now), open_chat)) =
             self.tz.as_ref().zip(self.now).zip(self.open_chat.as_ref())
         {
+            let now = now.to_zoned(tz.clone());
+
             column![
                 text(open_chat.name()),
                 horizontal_rule(11),
@@ -186,7 +188,7 @@ impl App {
                     column(
                         self.chats[open_chat]
                             .iter()
-                            .map(|chat| chat.as_iced_widget(now, tz)),
+                            .map(|chat| chat.as_iced_widget(&now, tz)),
                     )
                     .spacing(5),
                 )
