@@ -130,18 +130,18 @@ impl Message {
         cache: &RefCell<HashMap<Thread, Chat>>,
         body_ranges: Vec<BodyRange>,
         is_from_store: bool,
-    ) -> Option<Self> {
-        Some(Self {
+    ) -> Self {
+        Self {
             timestamp: Timestamp::from_millisecond(timestamp as i64).unwrap(),
             body: body_ranges_to_spans(body, body_ranges),
             attachments: attachments.into_iter().map(Attachment::from).collect(),
-            sender: cache.borrow().get(&Thread::Contact(sender))?.contact()?,
+            sender: cache.borrow()[&Thread::Contact(sender)].contact().unwrap(),
             sticker: sticker
                 .and_then(|sticker| sticker.data)
                 .map(Attachment::from),
             quote: quote.map(|quote| Quote::new(quote, cache)),
             is_from_store,
-        })
+        }
     }
 }
 
@@ -213,7 +213,7 @@ pub async fn decode_content(
                 cache,
                 body_ranges,
                 is_from_store,
-            )?;
+            );
 
             Some((chat, message))
         }
@@ -249,7 +249,7 @@ pub async fn decode_content(
                 cache,
                 body_ranges,
                 is_from_store,
-            )?;
+            );
 
             Some((chat, message))
         }
@@ -383,6 +383,20 @@ async fn get_group_cached(
     );
 
     Some(cache.borrow()[&chat].clone())
+}
+
+pub async fn ensure_self_exists(
+    manager: &mut RegisteredManager,
+    cache: &RefCell<HashMap<Thread, Chat>>,
+) {
+    get_contact_cached(
+        manager.registration_data().service_ids.aci,
+        Some(manager.registration_data().profile_key().bytes),
+        manager,
+        cache,
+    )
+    .await
+    .unwrap();
 }
 
 async fn get_contact_cached(

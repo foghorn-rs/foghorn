@@ -1,4 +1,4 @@
-use crate::message::{Chat, Message, decode_content};
+use crate::message::{Chat, Message, decode_content, ensure_self_exists};
 use iced::futures::{
     SinkExt as _, Stream, StreamExt as _,
     channel::{mpsc, oneshot},
@@ -135,80 +135,63 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Event>) {
 
                 task::spawn_local(async { url.send(rx.await.unwrap().to_string()) });
             }
-            Event::StreamMessages(c) => {
-                let manager = manager.borrow().clone().unwrap();
-                task::spawn_local(async move {
-                    let cache = Rc::new(RefCell::new(HashMap::new()));
+            Event::StreamMessages(mut c) => {
+                let mut manager = manager.borrow().clone().unwrap();
+                task::spawn_local(
+                    #[expect(clippy::large_stack_frames, reason = "what can we do about this?")]
+                    async move {
+                        let cache = Rc::new(RefCell::new(HashMap::new()));
 
-                    {
-                        let mut manager = manager.clone();
-                        task::spawn_local(async move {
-                            Box::pin(manager.request_contacts()).await.unwrap();
-                        });
-                    }
+                        ensure_self_exists(&mut manager, &cache).await;
 
-                    for thread in manager
-                        .store()
-                        .contacts()
-                        .await
-                        .into_iter()
-                        .flatten()
-                        .flatten()
-                        .map(|c| Thread::Contact(c.uuid))
-                        .chain(
-                            manager
-                                .store()
-                                .groups()
-                                .await
-                                .into_iter()
-                                .flatten()
-                                .flatten()
-                                .map(|g| Thread::Group(g.0)),
-                        )
-                    {
-                        for message in manager
+                        for thread in manager
                             .store()
-                            .messages(&thread, ..)
+                            .contacts()
                             .await
                             .into_iter()
                             .flatten()
                             .flatten()
+                            .map(|c| Thread::Contact(c.uuid))
+                            .chain(
+                                manager
+                                    .store()
+                                    .groups()
+                                    .await
+                                    .into_iter()
+                                    .flatten()
+                                    .flatten()
+                                    .map(|g| Thread::Group(g.0)),
+                            )
                         {
-                            let mut manager = manager.clone();
-                            let cache = cache.clone();
-                            let mut c = c.clone();
-                            task::spawn_local(async move {
+                            for message in manager
+                                .store()
+                                .messages(&thread, ..)
+                                .await
+                                .into_iter()
+                                .flatten()
+                                .flatten()
+                            {
                                 if let Some(message) =
                                     decode_content(message, &mut manager, &cache, true).await
                                 {
                                     c.send(message).await.unwrap();
                                 }
-                            });
+                            }
                         }
-                    }
 
-                    let mut stream = manager
-                        .clone()
-                        .receive_messages()
-                        .await
-                        .unwrap()
-                        .boxed_local();
+                        let mut stream = manager.receive_messages().await.unwrap().boxed_local();
 
-                    while let Some(next) = stream.next().await {
-                        if let Received::Content(message) = next {
-                            let mut manager = manager.clone();
-                            let cache = cache.clone();
-                            let mut c = c.clone();
-                            task::spawn_local(async move {
+                        while let Some(next) = stream.next().await {
+                            if let Received::Content(message) = next {
                                 if let Some(message) =
                                     decode_content(*message, &mut manager, &cache, false).await
                                 {
                                     c.send(message).await.unwrap();
                                 }
-                            });
+                            }
                         }
-                    }
-                });
+                    },
+                );
             }
             Event::Shutdown => return,
         }
