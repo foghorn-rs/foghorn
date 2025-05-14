@@ -261,7 +261,7 @@ fn body_ranges_to_spans(
     body: Option<String>,
     body_ranges: Vec<BodyRange>,
 ) -> Option<Vec<SignalSpan<'static>>> {
-    let body = body?;
+    let body = body.filter(|body| !body.is_empty())?;
 
     let mut flags = vec![0u8; body.len()];
 
