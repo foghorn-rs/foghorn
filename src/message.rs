@@ -121,16 +121,17 @@ pub struct Message {
 impl Message {
     fn new(
         timestamp: u64,
-        body: Option<Vec<Span<'static, String>>>,
+        body: Option<String>,
         attachments: Vec<AttachmentPointer>,
         sender: Uuid,
         sticker: Option<data_message::Sticker>,
         quote: Option<data_message::Quote>,
         cache: &RefCell<HashMap<Thread, Chat>>,
+        body_ranges: Vec<BodyRange>,
     ) -> Option<Self> {
         Some(Self {
             timestamp: Timestamp::from_millisecond(timestamp as i64).unwrap(),
-            body,
+            body: body_ranges_to_spans(body, body_ranges),
             attachments: attachments.into_iter().map(Attachment::from).collect(),
             sender: cache.borrow().get(&Thread::Contact(sender))?.contact()?,
             sticker: sticker
@@ -144,21 +145,19 @@ impl Message {
 #[derive(Clone, Debug)]
 pub struct Quote {
     pub timestamp: Timestamp,
-    pub body: Option<String>,
+    pub body: Option<Vec<Span<'static, String>>>,
     pub sender: Option<Contact>,
-    pub body_ranges: Vec<BodyRange>,
 }
 
 impl Quote {
     fn new(quote: data_message::Quote, cache: &RefCell<HashMap<Thread, Chat>>) -> Self {
         Self {
             timestamp: Timestamp::from_millisecond(quote.id() as i64).unwrap(),
-            body: quote.text,
+            body: body_ranges_to_spans(quote.text, quote.body_ranges),
             sender: quote
                 .author_aci
                 .and_then(|sender| sender.parse().ok())
                 .and_then(|sender| cache.borrow().get(&Thread::Contact(sender))?.contact()),
-            body_ranges: quote.body_ranges,
         }
     }
 }
@@ -200,8 +199,6 @@ pub async fn decode_content(
                 get_contact_cached(uuid, profile_key.as_deref(), manager, cache).await?
             };
 
-            let body = body_ranges_to_spans(body, body_ranges);
-
             let message = Message::new(
                 timestamp,
                 body,
@@ -210,6 +207,7 @@ pub async fn decode_content(
                 sticker,
                 quote,
                 cache,
+                body_ranges,
             )?;
 
             Some((chat, message))
@@ -236,8 +234,6 @@ pub async fn decode_content(
                     .await?
             };
 
-            let body = body_ranges_to_spans(body, body_ranges);
-
             let message = Message::new(
                 timestamp,
                 body,
@@ -246,6 +242,7 @@ pub async fn decode_content(
                 sticker,
                 quote,
                 cache,
+                body_ranges,
             )?;
 
             Some((chat, message))
@@ -352,7 +349,7 @@ async fn get_group_cached(
         }
     }
 
-    let mut members = Vec::new();
+    let mut members = vec![];
 
     for member in &group.members {
         let member =

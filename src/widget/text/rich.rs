@@ -179,7 +179,7 @@ where
 
     fn state(&self) -> tree::State {
         tree::State::new(State::<Link, _> {
-            spans: Vec::new(),
+            spans: vec![],
             span_pressed: None,
             revealed_spoilers: vec![],
             paragraph: Renderer::Paragraph::default(),
