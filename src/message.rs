@@ -111,7 +111,7 @@ impl From<AttachmentPointer> for Attachment {
 #[derive(Clone, Debug)]
 pub struct Message {
     pub timestamp: Timestamp,
-    pub body: Option<Vec<Span<'static, String>>>,
+    pub body: Option<Vec<Span<'static>>>,
     pub attachments: Vec<Attachment>,
     pub sticker: Option<Attachment>,
     pub sender: Contact,
@@ -148,7 +148,7 @@ impl Message {
 #[derive(Clone, Debug)]
 pub struct Quote {
     pub timestamp: Timestamp,
-    pub body: Option<Vec<Span<'static, String>>>,
+    pub body: Option<Vec<Span<'static>>>,
     pub sender: Option<Contact>,
 }
 
@@ -260,15 +260,12 @@ pub async fn decode_content(
 fn body_ranges_to_spans(
     body: Option<String>,
     body_ranges: Vec<BodyRange>,
-) -> Option<Vec<Span<'static, String>>> {
+) -> Option<Vec<Span<'static>>> {
     let body = body?;
 
     let mut flags = vec![0u8; body.len()];
-    let mut ranges = body_ranges;
 
-    ranges.sort_unstable_by_key(|range| (range.start(), range.length()));
-
-    for range in ranges {
+    for range in body_ranges {
         let start = range.start() as usize;
         let length = range.length() as usize;
         let end = start + length;
@@ -288,54 +285,54 @@ fn body_ranges_to_spans(
         }
     }
 
-    let get_bit = |flag: u8, i: usize| (flag & (1 << i)) != 0;
-
-    let mut spans: Vec<Span<'static, String>> = vec![];
+    let mut spans: Vec<Span<'static>> = vec![];
     let mut last_flag = flags[0];
-    let mut last_start = 0usize;
+    let mut in_progress_span = String::new();
 
-    for (index, flag) in flags.iter().enumerate() {
-        if last_flag != *flag || index == flags.len() - 1 {
-            let end = if index == flags.len() - 1 {
-                index + 1
-            } else {
-                index
-            };
-
-            let mut span = Span::new(body[last_start..end].to_string());
-
-            if get_bit(last_flag, 1) {
-                span.font = Some(Font {
-                    weight: font::Weight::Bold,
-                    ..Font::DEFAULT
-                });
-            }
-
-            if get_bit(last_flag, 2) {
-                span.font = Some(Font {
-                    style: font::Style::Italic,
-                    ..span.font.unwrap_or(Font::DEFAULT)
-                });
-            }
-
-            span.spoiler = get_bit(last_flag, 3);
-            span.strikethrough = get_bit(last_flag, 4);
-
-            if get_bit(last_flag, 5) {
-                span.font = Some(Font {
-                    family: font::Family::Monospace,
-                    ..span.font.unwrap_or(Font::DEFAULT)
-                });
-            }
-
-            spans.push(span);
-
-            last_flag = *flag;
-            last_start = index;
+    for (flag, c) in flags.iter().zip(body.chars()) {
+        if last_flag != *flag {
+            spans.push(span_from_flags(last_flag, &mut in_progress_span));
         }
+
+        last_flag = *flag;
+        in_progress_span.push(c);
     }
 
+    spans.push(span_from_flags(last_flag, &mut in_progress_span));
+
     Some(spans)
+}
+
+fn span_from_flags(last_flag: u8, in_progress_span: &mut String) -> Span<'static> {
+    let get_bit = |flag: u8, i: usize| (flag & (1 << i)) != 0;
+
+    let mut span = Span::new(std::mem::take(in_progress_span));
+
+    if get_bit(last_flag, 1) {
+        span.font = Some(Font {
+            weight: font::Weight::Bold,
+            ..Font::DEFAULT
+        });
+    }
+
+    if get_bit(last_flag, 2) {
+        span.font = Some(Font {
+            style: font::Style::Italic,
+            ..span.font.unwrap_or(Font::DEFAULT)
+        });
+    }
+
+    span.spoiler = get_bit(last_flag, 3);
+    span.strikethrough = get_bit(last_flag, 4);
+
+    if get_bit(last_flag, 5) {
+        span.font = Some(Font {
+            family: font::Family::Monospace,
+            ..span.font.unwrap_or(Font::DEFAULT)
+        });
+    }
+
+    span
 }
 
 async fn get_group_cached(

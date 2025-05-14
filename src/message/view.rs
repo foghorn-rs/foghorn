@@ -88,7 +88,7 @@ impl Message {
 
         let content = [
             self.quote.as_ref().map(Quote::as_iced_widget),
-            Some(Space::with_height(10).into()),
+            self.quote.as_ref().map(|_| Space::with_height(10).into()),
             Some(text(head).size(10).into()),
             self.body.as_deref().map(|body| {
                 Rich::with_spans(body)
