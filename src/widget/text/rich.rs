@@ -10,7 +10,7 @@ use iced::{
     widget::text::{self, Alignment, LineHeight, Shaping, Wrapping},
 };
 
-/// A bunch of [`Rich`] text.
+/// A bunch of [`SignalRich`] text.
 #[expect(missing_debug_implementations)]
 pub struct Rich<'a, Link, Message, Theme = iced::Theme, Renderer = iced::Renderer>
 where
@@ -130,7 +130,6 @@ where
     }
 
     /// Sets the default style of the [`Rich`] text.
-    #[must_use]
     pub fn style(mut self, style: impl Fn(&Theme) -> Style + 'a) -> Self
     where
         Theme::Class<'a>: From<StyleFn<'a, Theme>>,
@@ -140,7 +139,6 @@ where
     }
 
     /// Sets the default style class of the [`Rich`] text.
-    #[must_use]
     pub fn class(mut self, class: impl Into<Theme::Class<'a>>) -> Self {
         self.class = class.into();
         self
@@ -241,75 +239,35 @@ where
             let is_hovered_spoiler = Some(index) == self.hovered_spoiler;
             let is_revealed_spoiler = state.revealed_spoilers.contains(&index);
 
-            if span.highlight.is_some()
-                || span.underline
-                || span.strikethrough
-                || span.spoiler
-                || is_hovered_link
-                || is_hovered_spoiler
-            {
+            if span.strikethrough || span.spoiler || is_hovered_link || is_hovered_spoiler {
                 let translation = layout.position() - Point::ORIGIN;
                 let regions = state.paragraph.span_bounds(index);
 
                 if span.spoiler && !is_revealed_spoiler {
                     for bounds in &regions {
-                        let bounds = Rectangle::new(
-                            bounds.position() - Vector::new(span.padding.left, span.padding.top),
-                            bounds.size()
-                                + Size::new(span.padding.horizontal(), span.padding.vertical()),
-                        );
-
-                        renderer.with_layer(layout.bounds(), |renderer| {
-                            renderer.fill_quad(
-                                renderer::Quad {
-                                    bounds: bounds + translation,
-                                    border: border::rounded(4),
-                                    ..Default::default()
-                                },
-                                if is_hovered_spoiler {
-                                    style.hovered_spoiler
-                                } else {
-                                    style.spoiler
-                                },
-                            );
-                        });
-                    }
-                } else if let Some(highlight) = span.highlight {
-                    for bounds in &regions {
-                        let bounds = Rectangle::new(
-                            bounds.position() - Vector::new(span.padding.left, span.padding.top),
-                            bounds.size()
-                                + Size::new(span.padding.horizontal(), span.padding.vertical()),
-                        );
-
                         renderer.fill_quad(
                             renderer::Quad {
-                                bounds: bounds + translation,
-                                border: highlight.border,
+                                bounds: bounds.shrink([2, 0]) + translation,
+                                border: border::rounded(5),
                                 ..Default::default()
                             },
-                            highlight.background,
+                            if is_hovered_spoiler {
+                                style.hovered_spoiler
+                            } else {
+                                style.spoiler
+                            },
                         );
                     }
                 }
 
-                if span.underline || span.strikethrough || is_hovered_link {
-                    let size = span
-                        .size
-                        .or(self.size)
-                        .unwrap_or_else(|| renderer.default_size());
-
-                    let line_height = span
-                        .line_height
-                        .unwrap_or(self.line_height)
-                        .to_absolute(size);
-
-                    let color = span.color.or(style.color).unwrap_or(defaults.text_color);
-
+                if span.strikethrough || is_hovered_link {
+                    let size = self.size.unwrap_or_else(|| renderer.default_size());
+                    let line_height = self.line_height.to_absolute(size);
+                    let color = style.color.unwrap_or(defaults.text_color);
                     let baseline =
                         translation + Vector::new(0.0, size.0 + (line_height.0 - size.0) / 2.0);
 
-                    if span.underline || is_hovered_link {
+                    if is_hovered_link {
                         for bounds in &regions {
                             renderer.fill_quad(
                                 renderer::Quad {
@@ -360,7 +318,7 @@ where
         event: &Event,
         layout: Layout<'_>,
         cursor: mouse::Cursor,
-        _renderer: &Renderer,
+        renderer: &Renderer,
         _clipboard: &mut dyn Clipboard,
         shell: &mut Shell<'_, Message>,
         _viewport: &Rectangle,
@@ -427,6 +385,20 @@ where
                     }
                     Some(span) if Some(span) == self.hovered_spoiler => {
                         state.revealed_spoilers.push(span);
+
+                        refresh_spans::<_, Renderer>(
+                            state,
+                            layout.bounds().size(),
+                            self.spans.as_ref().as_ref(),
+                            self.line_height,
+                            self.size.unwrap_or_else(|| renderer.default_size()),
+                            self.font.unwrap_or_else(|| renderer.default_font()),
+                            self.align_x,
+                            self.align_y,
+                            self.wrapping,
+                        );
+
+                        shell.request_redraw();
                     }
                     _ => {}
                 }
@@ -477,20 +449,6 @@ where
         let size = size.unwrap_or_else(|| renderer.default_size());
         let font = font.unwrap_or_else(|| renderer.default_font());
 
-        let iced_spans: Vec<_> = spans.iter().cloned().map(text::Span::from).collect();
-
-        let text_with_spans = || advanced::Text {
-            content: iced_spans.as_slice(),
-            bounds,
-            size,
-            line_height,
-            font,
-            align_x,
-            align_y,
-            shaping: Shaping::Advanced,
-            wrapping,
-        };
-
         if state.spans == spans {
             match state.paragraph.compare(advanced::Text {
                 content: (),
@@ -508,16 +466,70 @@ where
                     state.paragraph.resize(bounds);
                 }
                 advanced::text::Difference::Shape => {
-                    state.paragraph = Renderer::Paragraph::with_spans(text_with_spans());
+                    refresh_spans::<_, Renderer>(
+                        state,
+                        limits.max(),
+                        spans,
+                        line_height,
+                        size,
+                        font,
+                        align_x,
+                        align_y,
+                        wrapping,
+                    );
                 }
             }
         } else {
-            state.paragraph = Renderer::Paragraph::with_spans(text_with_spans());
-            state.spans = spans.iter().cloned().map(Span::to_static).collect();
+            refresh_spans::<_, Renderer>(
+                state,
+                limits.max(),
+                spans,
+                line_height,
+                size,
+                font,
+                align_x,
+                align_y,
+                wrapping,
+            );
         }
 
         state.paragraph.min_bounds()
     })
+}
+
+fn refresh_spans<Link, Renderer>(
+    state: &mut State<Link, Renderer::Paragraph>,
+    bounds: Size,
+    spans: &[Span<'_, Link, Renderer::Font>],
+    line_height: LineHeight,
+    size: Pixels,
+    font: Renderer::Font,
+    align_x: Alignment,
+    align_y: alignment::Vertical,
+    wrapping: Wrapping,
+) where
+    Link: Clone,
+    Renderer: advanced::text::Renderer,
+{
+    let mut iced_spans: Vec<_> = spans.iter().cloned().map(text::Span::from).collect();
+    for &span in &state.revealed_spoilers {
+        iced_spans[span].color = None;
+    }
+
+    let text_with_spans = advanced::Text {
+        content: iced_spans.as_slice(),
+        bounds,
+        size,
+        line_height,
+        font,
+        align_x,
+        align_y,
+        shaping: Shaping::Advanced,
+        wrapping,
+    };
+
+    state.paragraph = Renderer::Paragraph::with_spans(text_with_spans);
+    state.spans = spans.iter().cloned().map(Span::into_static).collect();
 }
 
 fn draw<Renderer>(
