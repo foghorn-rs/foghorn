@@ -9,7 +9,7 @@ use iced::{
     Length::Fill,
     Subscription, Task,
     futures::channel::oneshot,
-    padding,
+    keyboard, padding,
     time::every,
     widget::{
         button, column, container, horizontal_rule, horizontal_space, qr_code, scrollable, text,
@@ -30,6 +30,8 @@ pub enum Message {
     Now(Timestamp),
     Tz(TimeZone),
     OpenChat(message::Chat),
+    NextChat,
+    PreviousChat,
     SplitAt(f32),
 }
 
@@ -151,8 +153,29 @@ impl App {
             Message::SplitAt(split_at) => self.split_at = split_at.clamp(170.0, 370.0),
             Message::Now(now) => self.now = Some(now),
             Message::Tz(tz) => self.tz = Some(tz),
-        }
+            Message::NextChat | Message::PreviousChat => {
+                let mut contacts = self.chats.keys().collect::<Vec<_>>();
+                contacts.sort_by_key(|c| Reverse(self.chats[c].last().map(|c| c.timestamp)));
 
+                if let Some(open_chat) = self.open_chat.as_ref() {
+                    if let Some(index) = contacts.iter().position(|chat| chat == &open_chat) {
+                        self.open_chat = if matches!(message, Message::NextChat) {
+                            Some(contacts[(index + 1) % contacts.len()].clone())
+                        } else if index == 0 {
+                            Some((*contacts.last().expect("Contacts must not be empty")).clone())
+                        } else {
+                            Some(contacts[index - 1].clone())
+                        }
+                    }
+                } else if !contacts.is_empty() {
+                    self.open_chat = if matches!(message, Message::NextChat) {
+                        Some(contacts[0].clone())
+                    } else {
+                        Some((*contacts.last().expect("Contacts must not be empty")).clone())
+                    }
+                }
+            }
+        }
         Task::none()
     }
 
@@ -214,6 +237,18 @@ impl App {
 
     #[expect(clippy::unused_self)]
     pub fn subscription(&self) -> Subscription<Message> {
-        every(Duration::from_secs(1)).map(|_| Message::Now(Timestamp::now()))
+        Subscription::batch([
+            every(Duration::from_secs(1)).map(|_| Message::Now(Timestamp::now())),
+            keyboard::on_key_press(|key, modifiers| match key.as_ref() {
+                keyboard::Key::Named(keyboard::key::Named::Tab) if modifiers.command() => {
+                    if modifiers.shift() {
+                        Some(Message::PreviousChat)
+                    } else {
+                        Some(Message::NextChat)
+                    }
+                }
+                _ => None,
+            }),
+        ])
     }
 }
