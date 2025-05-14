@@ -94,17 +94,13 @@ pub struct Attachment {
     pub ptr: AttachmentPointer,
     pub data: Option<Vec<u8>>,
     pub image: Option<image::Handle>,
-    pub preview: Option<image::Handle>,
 }
 
-impl From<AttachmentPointer> for Attachment {
-    fn from(ptr: AttachmentPointer) -> Self {
-        Self {
-            preview: ptr.thumbnail.clone().map(image::Handle::from_bytes),
-            ptr,
-            data: None,
-            image: None,
-        }
+impl Attachment {
+    async fn new(ptr: AttachmentPointer, manager: &RegisteredManager) -> Self {
+        let data = manager.get_attachment(&ptr).await.ok();
+        let image = data.clone().map(image::Handle::from_bytes);
+        Self { ptr, data, image }
     }
 }
 
@@ -120,7 +116,7 @@ pub struct Message {
 }
 
 impl Message {
-    fn new(
+    async fn new(
         timestamp: u64,
         body: Option<String>,
         attachments: Vec<AttachmentPointer>,
@@ -130,16 +126,32 @@ impl Message {
         cache: &RefCell<HashMap<Thread, Chat>>,
         body_ranges: Vec<BodyRange>,
         is_from_store: bool,
+        manager: &RegisteredManager,
     ) -> Self {
+        let mut a = Vec::new();
+        for ptr in attachments {
+            a.push(Attachment::new(ptr, manager).await);
+        }
+
+        let sticker = if let Some(ptr) = sticker.and_then(|sticker| sticker.data) {
+            Some(Attachment::new(ptr, manager).await)
+        } else {
+            None
+        };
+
+        let quote = if let Some(quote) = quote {
+            Some(Quote::new(quote, cache, manager).await)
+        } else {
+            None
+        };
+
         Self {
             timestamp: Timestamp::from_millisecond(timestamp as i64).unwrap(),
             body: body_ranges_to_spans(body, body_ranges),
-            attachments: attachments.into_iter().map(Attachment::from).collect(),
+            attachments: a,
             sender: cache.borrow()[&Thread::Contact(sender)].contact().unwrap(),
-            sticker: sticker
-                .and_then(|sticker| sticker.data)
-                .map(Attachment::from),
-            quote: quote.map(|quote| Quote::new(quote, cache)),
+            sticker,
+            quote,
             is_from_store,
         }
     }
@@ -149,14 +161,25 @@ impl Message {
 pub struct Quote {
     pub timestamp: Timestamp,
     pub body: Option<Vec<SignalSpan<'static>>>,
+    pub attachments: Vec<Attachment>,
     pub sender: Option<Contact>,
 }
 
 impl Quote {
-    fn new(quote: data_message::Quote, cache: &RefCell<HashMap<Thread, Chat>>) -> Self {
+    async fn new(
+        quote: data_message::Quote,
+        cache: &RefCell<HashMap<Thread, Chat>>,
+        manager: &RegisteredManager,
+    ) -> Self {
+        let mut a = Vec::new();
+        for ptr in quote.attachments.iter().filter_map(|a| a.thumbnail.clone()) {
+            a.push(Attachment::new(ptr, manager).await);
+        }
+
         Self {
             timestamp: Timestamp::from_millisecond(quote.id() as i64).unwrap(),
             body: body_ranges_to_spans(quote.text, quote.body_ranges),
+            attachments: a,
             sender: quote
                 .author_aci
                 .and_then(|sender| sender.parse().ok())
@@ -213,7 +236,9 @@ pub async fn decode_content(
                 cache,
                 body_ranges,
                 is_from_store,
-            );
+                manager,
+            )
+            .await;
 
             Some((chat, message))
         }
@@ -249,7 +274,9 @@ pub async fn decode_content(
                 cache,
                 body_ranges,
                 is_from_store,
-            );
+                manager,
+            )
+            .await;
 
             Some((chat, message))
         }

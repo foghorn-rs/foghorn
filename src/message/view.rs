@@ -3,7 +3,7 @@ use crate::widget::SignalRich;
 use iced::{
     Alignment, Element, Fill, Shrink,
     border::{self, radius},
-    widget::{Space, column, container, horizontal_space, image, row, text, text::Wrapping},
+    widget::{Column, Row, column, container, horizontal_space, image, row, text, text::Wrapping},
 };
 use jiff::{Span, Unit, Zoned, fmt::friendly::SpanPrinter, tz::TimeZone};
 
@@ -19,15 +19,10 @@ impl Chat {
             Self::Group(group) => &group.avatar,
         };
 
-        let content = [
-            avatar
-                .clone()
-                .map(|handle| container(image(handle).height(50)).into()),
-            Some(horizontal_space().into()),
-            Some(text(name).into()),
-        ];
-
-        row(content.into_iter().flatten())
+        Row::new()
+            .push_maybe(avatar.clone().map(|handle| image(handle).height(50)))
+            .push(horizontal_space())
+            .push(text(name))
             .align_y(Alignment::Center)
             .height(Shrink)
             .into()
@@ -45,17 +40,20 @@ impl Quote {
             .unwrap_or_default()
             + &timestamp;
 
-        let content = [
-            Some(text(head).size(10).into()),
-            self.body.as_deref().map(|body| {
+        let content = row![
+            column![text(head).size(10)].push_maybe(self.body.as_deref().map(|body| {
                 SignalRich::new()
                     .with_spans(body)
                     .wrapping(Wrapping::WordOrGlyph)
-                    .into()
-            }),
-        ];
-
-        let content = column(content.into_iter().flatten());
+            }))
+        ]
+        .push_maybe(
+            self.attachments
+                .first()
+                .and_then(|image| image.image.clone())
+                .map(|handle| image(handle).height(50)),
+        )
+        .spacing(5);
 
         container(content)
             .padding(10)
@@ -78,31 +76,42 @@ impl Message {
 
         let head = self.sender.name.clone() + ", " + &timestamp;
 
-        let content = [
-            self.quote
-                .as_ref()
-                .map(|quote| quote.as_iced_widget(now, tz)),
-            self.quote.as_ref().map(|_| Space::with_height(10).into()),
-            Some(text(head).size(10).into()),
-            self.body.as_deref().map(|body| {
-                SignalRich::new()
-                    .with_spans(body)
-                    .wrapping(Wrapping::WordOrGlyph)
-                    .into()
-            }),
-        ];
+        let content = Column::new()
+            .push_maybe(
+                self.quote
+                    .as_ref()
+                    .map(|quote| quote.as_iced_widget(now, tz)),
+            )
+            .push_maybe(
+                (!self.attachments.is_empty()).then_some(column(
+                    self.attachments
+                        .iter()
+                        .filter_map(|attachment| attachment.image.clone())
+                        .map(|handle| image(handle).width(325).into()),
+                )),
+            )
+            .push(
+                column![text(head).size(10)].push_maybe(self.body.as_deref().map(|body| {
+                    SignalRich::new()
+                        .with_spans(body)
+                        .wrapping(Wrapping::WordOrGlyph)
+                })),
+            )
+            .spacing(10);
 
-        let content = column(content.into_iter().flatten());
-
-        let content = container(content).max_width(650).padding(10).style(|t| {
-            container::primary(t).border({
-                border::rounded(if self.sender.is_self {
-                    radius(15).top_right(5)
-                } else {
-                    radius(15).top_left(5)
+        let content = container(content)
+            .max_width(650)
+            .padding(10)
+            .style(|t| {
+                container::primary(t).border({
+                    border::rounded(if self.sender.is_self {
+                        radius(15).top_right(5)
+                    } else {
+                        radius(15).top_left(5)
+                    })
                 })
             })
-        });
+            .into();
 
         let mut items = [
             self.sender.avatar.clone().map(|handle| {
@@ -111,7 +120,7 @@ impl Message {
                     .align_y(Alignment::Start)
                     .into()
             }),
-            Some(content.into()),
+            Some(content),
             Some(horizontal_space().into()),
         ];
 
