@@ -234,6 +234,7 @@ impl App {
                 .height(Fill)
                 .anchor_bottom()
                 .spacing(0),
+                horizontal_rule(11),
                 text_editor(&self.message_content)
                     .min_height(20)
                     .on_action(Message::ContentEdit)

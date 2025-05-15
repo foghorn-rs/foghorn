@@ -161,6 +161,8 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Event>) {
                 task::spawn_local(
                     #[expect(clippy::large_stack_frames, reason = "what can we do about this?")]
                     async move {
+                        let mut loading = true;
+
                         ensure_self_exists(&mut manager, &cache).await;
 
                         for thread in manager
@@ -191,7 +193,7 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Event>) {
                                 .flatten()
                             {
                                 if let Some(message) =
-                                    decode_content(message, &mut manager, &cache, true).await
+                                    decode_content(message, &mut manager, &cache, loading).await
                                 {
                                     c.send(message).await.unwrap();
                                 }
@@ -203,10 +205,12 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Event>) {
                         while let Some(next) = stream.next().await {
                             if let Received::Content(message) = next {
                                 if let Some(message) =
-                                    decode_content(*message, &mut manager, &cache, false).await
+                                    decode_content(*message, &mut manager, &cache, loading).await
                                 {
                                     c.send(message).await.unwrap();
                                 }
+                            } else if matches!(next, Received::QueueEmpty) {
+                                loading = false;
                             }
                         }
                     },
