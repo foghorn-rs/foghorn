@@ -36,9 +36,39 @@ impl Chat {
             Self::Group(group) => &group.title,
         }
     }
-}
 
-impl Chat {
+    pub fn thread(&self) -> Thread {
+        match self {
+            Self::Contact(contact) => Thread::Contact(contact.uuid),
+            Self::Group(group) => Thread::Group(group.key),
+        }
+    }
+
+    pub fn uuid(&self) -> Option<Uuid> {
+        match self {
+            Self::Contact(contact) => Some(contact.uuid),
+            Self::Group(_) => None,
+        }
+    }
+
+    pub fn profile_key(&self) -> Option<ProfileKeyBytes> {
+        match self {
+            Self::Contact(contact) => Some(contact.key),
+            Self::Group(_) => None,
+        }
+    }
+
+    pub fn group_context(&self) -> Option<GroupContextV2> {
+        match self {
+            Self::Contact(_) => None,
+            Self::Group(group) => Some(GroupContextV2 {
+                master_key: Some(group.key.into()),
+                revision: Some(group.revision),
+                group_change: None,
+            }),
+        }
+    }
+
     fn contact(&self) -> Option<Contact> {
         match self {
             Self::Contact(contact) => Some(contact.clone()),
@@ -49,6 +79,7 @@ impl Chat {
 
 #[derive(Clone, Debug)]
 pub struct Contact {
+    pub key: ProfileKeyBytes,
     pub uuid: Uuid,
     pub name: String,
     pub avatar: Option<image::Handle>,
@@ -72,6 +103,7 @@ impl Hash for Contact {
 #[derive(Clone, Debug)]
 pub struct Group {
     pub key: GroupMasterKeyBytes,
+    pub revision: u32,
     pub title: String,
     pub avatar: Option<image::Handle>,
     pub members: Vec<Contact>,
@@ -118,7 +150,7 @@ pub struct Message {
 }
 
 impl Message {
-    async fn new(
+    pub async fn new(
         timestamp: u64,
         body: Option<String>,
         attachments: Vec<AttachmentPointer>,
@@ -324,6 +356,7 @@ async fn get_group_cached(
         chat.clone(),
         Chat::Group(Group {
             key,
+            revision,
             title: group.title,
             avatar,
             members,
@@ -362,6 +395,7 @@ async fn get_contact_cached(
     let profile_key = ProfileKey::create(profile_key?.try_into().ok()?);
 
     let contact = Contact {
+        key: profile_key.bytes,
         uuid,
         name: manager
             .retrieve_profile_by_uuid(uuid, profile_key)

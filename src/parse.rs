@@ -11,7 +11,6 @@ use std::mem::take;
 /// strikethrough: ~~text~~
 /// monospace: `text`
 /// escaping: \*test\*
-#[cfg_attr(not(test), expect(dead_code))]
 pub fn markdown_to_body_ranges(input: &str) -> (String, Vec<BodyRange>) {
     let mut bold = None;
     let mut italic = None;

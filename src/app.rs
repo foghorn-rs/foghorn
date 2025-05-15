@@ -12,13 +12,14 @@ use iced::{
     keyboard, padding,
     time::every,
     widget::{
-        button, column, container, horizontal_rule, horizontal_space, qr_code, scrollable, text,
+        button, column, container, horizontal_rule, horizontal_space, qr_code, row, scrollable,
+        text, text_editor,
     },
 };
 use jiff::{Timestamp, tz::TimeZone};
 use notify_rust::Notification;
 use presage::libsignal_service::provisioning::ProvisioningError;
-use std::{cmp::Reverse, collections::HashMap, sync::Arc, time::Duration};
+use std::{cmp::Reverse, collections::HashMap, mem::take, sync::Arc, time::Duration};
 
 #[derive(Clone, Debug)]
 pub enum Message {
@@ -33,6 +34,8 @@ pub enum Message {
     NextChat,
     PreviousChat,
     SplitAt(f32),
+    ContentEdit(text_editor::Action),
+    Send,
 }
 
 pub struct App {
@@ -42,6 +45,7 @@ pub struct App {
     now: Option<Timestamp>,
     tz: Option<TimeZone>,
     open_chat: Option<message::Chat>,
+    message_content: text_editor::Content,
     split_at: f32,
 }
 
@@ -58,6 +62,7 @@ impl App {
                 now: None,
                 tz: None,
                 open_chat: None,
+                message_content: text_editor::Content::new(),
                 split_at: 270.0,
             },
             Task::batch([
@@ -175,6 +180,16 @@ impl App {
                     }
                 }
             }
+            Message::ContentEdit(action) => self.message_content.perform(action),
+            Message::Send => {
+                let content = take(&mut self.message_content).text();
+
+                let manager_manager = self.manager_manager.clone();
+                return Task::future(
+                    manager_manager.send(content, self.open_chat.clone().unwrap()),
+                )
+                .map(Message::Received);
+            }
         }
         Task::none()
     }
@@ -215,8 +230,15 @@ impl App {
                     )
                     .spacing(5),
                 )
+                .height(Fill)
                 .anchor_bottom()
-                .spacing(0)
+                .spacing(0),
+                row![
+                    text_editor(&self.message_content)
+                        .min_height(20)
+                        .on_action(Message::ContentEdit),
+                    button(">").on_press(Message::Send)
+                ]
             ]
             .padding(padding::all(5).left(0))
             .into()
