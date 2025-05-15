@@ -26,11 +26,11 @@ pub enum Message {
     ManagerError(Option<Arc<ManagerError>>),
     QrCode(String),
     LinkSecondary,
-    Received((message::Chat, message::Message)),
+    Received(Box<(message::Chat, message::Message)>),
     CloseDialog,
     Now(Timestamp),
     Tz(TimeZone),
-    OpenChat(message::Chat),
+    OpenChat(Box<message::Chat>),
     NextChat,
     PreviousChat,
     SplitAt(f32),
@@ -100,6 +100,7 @@ impl App {
 
                 return Task::future(self.manager_manager.clone().stream_mesages())
                     .then(Task::stream)
+                    .map(Box::new)
                     .map(Message::Received);
             }
             Message::LinkSecondary => {
@@ -120,7 +121,9 @@ impl App {
                     Action::None,
                 );
             }
-            Message::Received((chat, message)) => {
+            Message::Received(message) => {
+                let (chat, message) = *message;
+
                 self.chats
                     .entry(chat)
                     .and_modify(|m| {
@@ -154,7 +157,7 @@ impl App {
                 }
             }
             Message::CloseDialog => self.dialog.close(),
-            Message::OpenChat(open_chat) => self.open_chat = Some(open_chat),
+            Message::OpenChat(open_chat) => self.open_chat = Some(*open_chat),
             Message::SplitAt(split_at) => self.split_at = split_at.clamp(170.0, 370.0),
             Message::Now(now) => self.now = Some(now),
             Message::Tz(tz) => self.tz = Some(tz),
@@ -189,6 +192,7 @@ impl App {
                     manager_manager.send(content, self.open_chat.clone().unwrap()),
                 )
                 .and_then(Task::done)
+                .map(Box::new)
                 .map(Message::Received);
             }
         }
@@ -204,7 +208,7 @@ impl App {
             scrollable(
                 column(contacts.into_iter().map(|c| {
                     button(c.as_iced_widget())
-                        .on_press(Message::OpenChat(c.clone()))
+                        .on_press(Message::OpenChat(c.clone().into()))
                         .padding(5)
                         .style(button::secondary)
                         .into()
