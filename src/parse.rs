@@ -24,6 +24,14 @@ pub fn markdown_to_body_ranges(input: &str) -> (String, Vec<BodyRange>) {
     let mut count = 0; // count codepoints, not bytes
     let mut ranges = Vec::new();
 
+    let mut push_range = |count, pos, style| {
+        ranges.push(BodyRange {
+            start: Some(pos),
+            length: Some(count - pos),
+            associated_value: Some(AssociatedValue::Style(style as i32)),
+        });
+    };
+
     while let Some(ch) = iter.next() {
         match ch {
             '*' if iter.peek() == Some(&'*') => {
@@ -31,11 +39,7 @@ pub fn markdown_to_body_ranges(input: &str) -> (String, Vec<BodyRange>) {
                 iter.next();
 
                 if let Some(bold) = bold.take() {
-                    ranges.push(BodyRange {
-                        start: Some(bold),
-                        length: Some(count - bold),
-                        associated_value: Some(AssociatedValue::Style(Style::Bold as i32)),
-                    });
+                    push_range(count, bold, Style::Bold);
                 } else {
                     bold = Some(count);
                 }
@@ -44,11 +48,7 @@ pub fn markdown_to_body_ranges(input: &str) -> (String, Vec<BodyRange>) {
                 // we are starting or ending an italic range
 
                 if let Some(italic) = italic.take() {
-                    ranges.push(BodyRange {
-                        start: Some(italic),
-                        length: Some(count - italic),
-                        associated_value: Some(AssociatedValue::Style(Style::Italic as i32)),
-                    });
+                    push_range(count, italic, Style::Italic);
                 } else {
                     italic = Some(count);
                 }
@@ -58,11 +58,7 @@ pub fn markdown_to_body_ranges(input: &str) -> (String, Vec<BodyRange>) {
                 iter.next();
 
                 if let Some(spoiler) = spoiler.take() {
-                    ranges.push(BodyRange {
-                        start: Some(spoiler),
-                        length: Some(count - spoiler),
-                        associated_value: Some(AssociatedValue::Style(Style::Spoiler as i32)),
-                    });
+                    push_range(count, spoiler, Style::Spoiler);
                 } else {
                     spoiler = Some(count);
                 }
@@ -72,11 +68,7 @@ pub fn markdown_to_body_ranges(input: &str) -> (String, Vec<BodyRange>) {
                 iter.next();
 
                 if let Some(strikethrough) = strikethrough.take() {
-                    ranges.push(BodyRange {
-                        start: Some(strikethrough),
-                        length: Some(count - strikethrough),
-                        associated_value: Some(AssociatedValue::Style(Style::Strikethrough as i32)),
-                    });
+                    push_range(count, strikethrough, Style::Strikethrough);
                 } else {
                     strikethrough = Some(count);
                 }
@@ -85,11 +77,7 @@ pub fn markdown_to_body_ranges(input: &str) -> (String, Vec<BodyRange>) {
                 // we are starting or ending a monospace range
 
                 if let Some(monospace) = monospace.take() {
-                    ranges.push(BodyRange {
-                        start: Some(monospace),
-                        length: Some(count - monospace),
-                        associated_value: Some(AssociatedValue::Style(Style::Monospace as i32)),
-                    });
+                    push_range(count, monospace, Style::Monospace);
                 } else {
                     monospace = Some(count);
                 }
