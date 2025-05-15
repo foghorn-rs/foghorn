@@ -5,6 +5,7 @@ mod app;
 mod dialog;
 mod manager_manager;
 mod message;
+mod parse;
 mod widget;
 
 fn main() -> Result {

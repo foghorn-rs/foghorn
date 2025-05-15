@@ -1,4 +1,4 @@
 mod rich;
-mod span;
+pub mod span;
 pub use rich::SignalRich;
 pub use span::SignalSpan;

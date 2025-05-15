@@ -1,4 +1,6 @@
-use crate::{manager_manager::RegisteredManager, widget::SignalSpan};
+use crate::{
+    manager_manager::RegisteredManager, parse::body_ranges_to_signal_spans, widget::SignalSpan,
+};
 use iced::widget::image;
 use jiff::Timestamp;
 use presage::{
@@ -8,8 +10,8 @@ use presage::{
         zkgroup::{GroupMasterKeyBytes, ProfileKeyBytes},
     },
     proto::{
-        AttachmentPointer, BodyRange, DataMessage, GroupContextV2, SyncMessage,
-        body_range::AssociatedValue, data_message, sync_message::Sent,
+        AttachmentPointer, BodyRange, DataMessage, GroupContextV2, SyncMessage, data_message,
+        sync_message::Sent,
     },
     store::{ContentsStore as _, Thread},
 };
@@ -147,7 +149,7 @@ impl Message {
 
         Self {
             timestamp: Timestamp::from_millisecond(timestamp as i64).unwrap(),
-            body: body_ranges_to_spans(body, body_ranges),
+            body: body_ranges_to_signal_spans(body, body_ranges),
             attachments: a,
             sender: cache.borrow()[&Thread::Contact(sender)].contact().unwrap(),
             sticker,
@@ -178,7 +180,7 @@ impl Quote {
 
         Self {
             timestamp: Timestamp::from_millisecond(quote.id() as i64).unwrap(),
-            body: body_ranges_to_spans(quote.text, quote.body_ranges),
+            body: body_ranges_to_signal_spans(quote.text, quote.body_ranges),
             attachments: a,
             sender: quote
                 .author_aci
@@ -282,53 +284,6 @@ pub async fn decode_content(
         }
         _ => None,
     }
-}
-
-fn body_ranges_to_spans(
-    body: Option<String>,
-    body_ranges: Vec<BodyRange>,
-) -> Option<Vec<SignalSpan<'static>>> {
-    let body = body.filter(|body| !body.is_empty())?;
-
-    let mut flags = vec![0u8; body.len()];
-
-    for range in body_ranges {
-        let start = range.start() as usize;
-        let length = range.length() as usize;
-        let end = start + length;
-
-        let Some(style) = range
-            .associated_value
-            .as_ref()
-            .and_then(|value| match value {
-                AssociatedValue::MentionAci(_) => Some(0),
-                AssociatedValue::Style(style) => (1..=5).contains(style).then_some(*style),
-            })
-        else {
-            continue;
-        };
-
-        for flag in flags.iter_mut().take(end).skip(start) {
-            *flag |= 1 << style;
-        }
-    }
-
-    let mut spans: Vec<SignalSpan<'static>> = vec![];
-    let mut last_flag = flags[0];
-    let mut in_progress_span = String::new();
-
-    for (flag, c) in flags.iter().zip(body.chars()) {
-        if last_flag != *flag {
-            spans.push(SignalSpan::new(std::mem::take(&mut in_progress_span)).flags(last_flag));
-        }
-
-        last_flag = *flag;
-        in_progress_span.push(c);
-    }
-
-    spans.push(SignalSpan::new(std::mem::take(&mut in_progress_span)).flags(last_flag));
-
-    Some(spans)
 }
 
 async fn get_group_cached(
