@@ -98,7 +98,7 @@ impl ManagerManager {
         rx
     }
 
-    pub async fn send(mut self, content: String, chat: Chat) -> (Chat, Message) {
+    pub async fn send(mut self, content: String, chat: Chat) -> Option<(Chat, Message)> {
         let (tx, rx) = oneshot::channel();
 
         self.sender
@@ -106,7 +106,7 @@ impl ManagerManager {
             .await
             .unwrap();
 
-        rx.await.unwrap()
+        rx.await.ok()
     }
 }
 
@@ -216,7 +216,10 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Event>) {
                 let mut manager = manager.borrow().clone().unwrap();
                 let cache = cache.clone();
                 task::spawn_local(async move {
-                    let (body, body_ranges) = markdown_to_body_ranges(&content);
+                    let (body, body_ranges) = markdown_to_body_ranges(content.trim());
+                    if body.trim().is_empty() {
+                        return;
+                    }
 
                     let metadata = Metadata {
                         sender: manager.registration_data().service_ids.aci().into(),

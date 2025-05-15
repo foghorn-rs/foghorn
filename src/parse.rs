@@ -174,6 +174,8 @@ pub fn markdown_to_body_ranges(input: &str) -> (String, Vec<BodyRange>) {
         update_ranges(monospace, diff);
     }
 
+    ranges.retain(|range| range.length() != 0);
+
     (output, ranges)
 }
 

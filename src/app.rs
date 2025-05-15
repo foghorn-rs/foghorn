@@ -12,8 +12,8 @@ use iced::{
     keyboard, padding,
     time::every,
     widget::{
-        button, column, container, horizontal_rule, horizontal_space, qr_code, row, scrollable,
-        text, text_editor,
+        button, column, container, horizontal_rule, horizontal_space, qr_code, scrollable, text,
+        text_editor,
     },
 };
 use jiff::{Timestamp, tz::TimeZone};
@@ -188,6 +188,7 @@ impl App {
                 return Task::future(
                     manager_manager.send(content, self.open_chat.clone().unwrap()),
                 )
+                .and_then(Task::done)
                 .map(Message::Received);
             }
         }
@@ -233,12 +234,18 @@ impl App {
                 .height(Fill)
                 .anchor_bottom()
                 .spacing(0),
-                row![
-                    text_editor(&self.message_content)
-                        .min_height(20)
-                        .on_action(Message::ContentEdit),
-                    button(">").on_press(Message::Send)
-                ]
+                text_editor(&self.message_content)
+                    .min_height(20)
+                    .on_action(Message::ContentEdit)
+                    .key_binding(|key_press| {
+                        let modifiers = key_press.modifiers;
+                        match text_editor::Binding::from_key_press(key_press) {
+                            Some(text_editor::Binding::Enter) if !modifiers.shift() => {
+                                Some(text_editor::Binding::Custom(Message::Send))
+                            }
+                            binding => binding,
+                        }
+                    }),
             ]
             .padding(padding::all(5).left(0))
             .into()
