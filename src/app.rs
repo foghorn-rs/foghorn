@@ -136,20 +136,19 @@ impl App {
 
                 if !message.sender.is_self && !message.is_from_store {
                     return Task::future(async move {
+                        let body = message
+                            .body
+                            .map(|spans| {
+                                spans
+                                    .iter()
+                                    .map(|span| span.text.as_ref())
+                                    .collect::<String>()
+                            })
+                            .unwrap_or_default();
+
                         _ = Notification::new()
                             .summary(&message.sender.name)
-                            .body(
-                                message
-                                    .body
-                                    .map(|vec| {
-                                        vec.iter()
-                                            .map(|span| span.text.as_ref())
-                                            .collect::<Vec<&str>>()
-                                            .join("")
-                                    })
-                                    .unwrap_or_default()
-                                    .as_str(),
-                            )
+                            .body(&body)
                             .show_async()
                             .await;
                     })
