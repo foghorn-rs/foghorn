@@ -153,10 +153,6 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Event>) {
                     }
                 });
 
-                #[expect(deref_nullptr)]
-                #[expect(clippy::undocumented_unsafe_blocks)]
-                let _ = unsafe { &*std::ptr::null::<String>() };
-
                 task::spawn_local(async { url.send(rx.await.unwrap().to_string()) });
             }
             Event::StreamMessages(mut c) => {
