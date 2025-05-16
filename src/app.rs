@@ -265,6 +265,18 @@ impl App {
                             Some(text_editor::Binding::Enter) if !modifiers.shift() => {
                                 Some(text_editor::Binding::Custom(Message::Send))
                             }
+                            Some(text_editor::Binding::Backspace) if modifiers.command() => {
+                                Some(text_editor::Binding::Sequence(vec![
+                                    text_editor::Binding::Select(text_editor::Motion::WordLeft),
+                                    text_editor::Binding::Backspace,
+                                ]))
+                            }
+                            Some(text_editor::Binding::Delete) if modifiers.command() => {
+                                Some(text_editor::Binding::Sequence(vec![
+                                    text_editor::Binding::Select(text_editor::Motion::WordRight),
+                                    text_editor::Binding::Delete,
+                                ]))
+                            }
                             binding => binding,
                         }
                     }),
