@@ -26,11 +26,11 @@ pub enum Message {
     ManagerError(Option<Arc<ManagerError>>),
     QrCode(String),
     LinkSecondary,
-    Received(Box<(message::Chat, message::Message)>),
+    Received((message::Chat, Arc<message::Message>)),
     CloseDialog,
     Now(Timestamp),
     Tz(TimeZone),
-    OpenChat(Box<message::Chat>),
+    OpenChat(message::Chat),
     NextChat,
     PreviousChat,
     SplitAt(f32),
@@ -41,7 +41,7 @@ pub enum Message {
 pub struct App {
     manager_manager: ManagerManager,
     dialog: Dialog,
-    chats: HashMap<message::Chat, Vec<message::Message>>,
+    chats: HashMap<message::Chat, Vec<Arc<message::Message>>>,
     now: Option<Timestamp>,
     tz: Option<TimeZone>,
     open_chat: Option<message::Chat>,
@@ -100,7 +100,6 @@ impl App {
 
                 return Task::future(self.manager_manager.clone().stream_mesages())
                     .then(Task::stream)
-                    .map(Box::new)
                     .map(Message::Received);
             }
             Message::LinkSecondary => {
@@ -121,9 +120,7 @@ impl App {
                     Action::None,
                 );
             }
-            Message::Received(message) => {
-                let (chat, message) = *message;
-
+            Message::Received((chat, message)) => {
                 self.chats
                     .entry(chat)
                     .and_modify(|m| {
@@ -138,6 +135,7 @@ impl App {
                     return Task::future(async move {
                         let body = message
                             .body
+                            .as_ref()
                             .map(|spans| {
                                 spans
                                     .iter()
@@ -156,7 +154,7 @@ impl App {
                 }
             }
             Message::CloseDialog => self.dialog.close(),
-            Message::OpenChat(open_chat) => self.open_chat = Some(*open_chat),
+            Message::OpenChat(open_chat) => self.open_chat = Some(open_chat),
             Message::SplitAt(split_at) => self.split_at = split_at.clamp(170.0, 370.0),
             Message::Now(now) => self.now = Some(now),
             Message::Tz(tz) => self.tz = Some(tz),
@@ -191,7 +189,6 @@ impl App {
                     manager_manager.send(content, self.open_chat.clone().unwrap()),
                 )
                 .and_then(Task::done)
-                .map(Box::new)
                 .map(Message::Received);
             }
         }
@@ -207,7 +204,7 @@ impl App {
             scrollable(
                 column(contacts.into_iter().map(|c| {
                     button(c.as_iced_widget())
-                        .on_press(Message::OpenChat(c.clone().into()))
+                        .on_press(Message::OpenChat(c.clone()))
                         .padding(5)
                         .style(button::secondary)
                         .into()

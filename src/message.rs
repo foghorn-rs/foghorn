@@ -3,6 +3,7 @@ use crate::{
 };
 use iced::widget::image;
 use jiff::Timestamp;
+use mime::Mime;
 use presage::{
     libsignal_service::{
         content::{ContentBody, Metadata},
@@ -19,14 +20,15 @@ use std::{
     cell::RefCell,
     collections::HashMap,
     hash::{Hash, Hasher},
+    sync::Arc,
 };
 
 mod view;
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum Chat {
-    Contact(Contact),
-    Group(Group),
+    Contact(Arc<Contact>),
+    Group(Arc<Group>),
 }
 
 impl Chat {
@@ -69,7 +71,7 @@ impl Chat {
         }
     }
 
-    fn contact(&self) -> Option<Contact> {
+    fn contact(&self) -> Option<Arc<Contact>> {
         match self {
             Self::Contact(contact) => Some(contact.clone()),
             Self::Group(_) => None,
@@ -77,7 +79,7 @@ impl Chat {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug, Eq)]
 pub struct Contact {
     pub key: ProfileKeyBytes,
     pub uuid: Uuid,
@@ -92,21 +94,19 @@ impl PartialEq for Contact {
     }
 }
 
-impl Eq for Contact {}
-
 impl Hash for Contact {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.uuid.hash(state);
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug, Eq)]
 pub struct Group {
     pub key: GroupMasterKeyBytes,
     pub revision: u32,
     pub title: String,
     pub avatar: Option<image::Handle>,
-    pub members: Vec<Contact>,
+    pub members: Vec<Arc<Contact>>,
 }
 
 impl PartialEq for Group {
@@ -115,36 +115,43 @@ impl PartialEq for Group {
     }
 }
 
-impl Eq for Group {}
-
 impl Hash for Group {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.key.hash(state);
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct Attachment {
     pub ptr: AttachmentPointer,
-    pub data: Option<Vec<u8>>,
+    pub mime: Mime,
     pub image: Option<image::Handle>,
 }
 
 impl Attachment {
     async fn new(ptr: AttachmentPointer, manager: &RegisteredManager) -> Self {
-        let data = manager.get_attachment(&ptr).await.ok();
-        let image = data.clone().map(image::Handle::from_bytes);
-        Self { ptr, data, image }
+        let mime = ptr.content_type().parse::<Mime>().unwrap();
+        let image = if mime.type_() == mime::IMAGE {
+            manager
+                .get_attachment(&ptr)
+                .await
+                .ok()
+                .map(image::Handle::from_bytes)
+        } else {
+            None
+        };
+
+        Self { ptr, mime, image }
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct Message {
     pub timestamp: Timestamp,
     pub body: Option<Vec<SignalSpan<'static>>>,
     pub attachments: Vec<Attachment>,
     pub sticker: Option<Attachment>,
-    pub sender: Contact,
+    pub sender: Arc<Contact>,
     pub quote: Option<Quote>,
     pub is_from_store: bool,
 }
@@ -191,12 +198,12 @@ impl Message {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct Quote {
     pub timestamp: Timestamp,
     pub body: Option<Vec<SignalSpan<'static>>>,
     pub attachments: Vec<Attachment>,
-    pub sender: Option<Contact>,
+    pub sender: Option<Arc<Contact>>,
 }
 
 impl Quote {
@@ -227,7 +234,7 @@ pub async fn decode_content(
     manager: &mut RegisteredManager,
     cache: &RefCell<HashMap<Thread, Chat>>,
     is_from_store: bool,
-) -> Option<(Chat, Message)> {
+) -> Option<(Chat, Arc<Message>)> {
     match (content.metadata, content.body) {
         (
             Metadata {
@@ -272,7 +279,8 @@ pub async fn decode_content(
                 is_from_store,
                 manager,
             )
-            .await;
+            .await
+            .into();
 
             Some((chat, message))
         }
@@ -310,7 +318,8 @@ pub async fn decode_content(
                 is_from_store,
                 manager,
             )
-            .await;
+            .await
+            .into();
 
             Some((chat, message))
         }
@@ -346,22 +355,21 @@ async fn get_group_cached(
         members.push(member);
     }
 
-    let avatar = manager
-        .retrieve_group_avatar(context)
-        .await
-        .ok()?
-        .map(image::Handle::from_bytes);
+    let group = Group {
+        key,
+        revision,
+        title: group.title,
+        avatar: manager
+            .retrieve_group_avatar(context)
+            .await
+            .ok()?
+            .map(image::Handle::from_bytes),
+        members,
+    };
 
-    cache.borrow_mut().insert(
-        chat.clone(),
-        Chat::Group(Group {
-            key,
-            revision,
-            title: group.title,
-            avatar,
-            members,
-        }),
-    );
+    cache
+        .borrow_mut()
+        .insert(chat.clone(), Chat::Group(group.into()));
 
     Some(cache.borrow()[&chat].clone())
 }
@@ -413,7 +421,7 @@ async fn get_contact_cached(
 
     cache
         .borrow_mut()
-        .insert(chat.clone(), Chat::Contact(contact));
+        .insert(chat.clone(), Chat::Contact(contact.into()));
 
     Some(cache.borrow()[&chat].clone())
 }

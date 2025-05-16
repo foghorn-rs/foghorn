@@ -30,8 +30,8 @@ pub type ManagerError = presage::Error<<SledStore as Store>::Error>;
 enum Event {
     LoadRegistered(oneshot::Sender<ManagerError>),
     LinkSecondary(oneshot::Sender<ManagerError>, oneshot::Sender<String>),
-    StreamMessages(mpsc::Sender<(Chat, Message)>),
-    SendMessage(String, Chat, oneshot::Sender<(Chat, Message)>),
+    StreamMessages(mpsc::Sender<(Chat, Arc<Message>)>),
+    SendMessage(String, Chat, oneshot::Sender<(Chat, Arc<Message>)>),
     Shutdown,
 }
 
@@ -90,7 +90,7 @@ impl ManagerManager {
         rx.await.ok()
     }
 
-    pub async fn stream_mesages(mut self) -> impl Stream<Item = (Chat, Message)> {
+    pub async fn stream_mesages(mut self) -> impl Stream<Item = (Chat, Arc<Message>)> {
         let (tx, rx) = mpsc::channel(100);
 
         self.sender.send(Event::StreamMessages(tx)).await.unwrap();
@@ -98,7 +98,7 @@ impl ManagerManager {
         rx
     }
 
-    pub async fn send(mut self, content: String, chat: Chat) -> Option<(Chat, Message)> {
+    pub async fn send(mut self, content: String, chat: Chat) -> Option<(Chat, Arc<Message>)> {
         let (tx, rx) = oneshot::channel();
 
         self.sender
@@ -152,6 +152,10 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Event>) {
                         Err(err) => c.send(err).unwrap(),
                     }
                 });
+
+                #[expect(deref_nullptr)]
+                #[expect(clippy::undocumented_unsafe_blocks)]
+                let _ = unsafe { &*std::ptr::null::<String>() };
 
                 task::spawn_local(async { url.send(rx.await.unwrap().to_string()) });
             }

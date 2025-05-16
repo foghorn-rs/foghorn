@@ -11,6 +11,7 @@ iced.git = "https://github.com/iced-rs/iced"
 
 iced_dialog = { git = "https://github.com/pml68/iced_dialog", branch = "master" }
 jiff = "0.2.13"
+mime = "0.3.17"
 notify-rust = "4.11.7"
 presage = { git = "https://github.com/whisperfish/presage" }
 presage-store-sled = { git = "https://github.com/whisperfish/presage" }
