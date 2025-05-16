@@ -1,7 +1,10 @@
 use crate::{
     manager_manager::RegisteredManager, parse::body_ranges_to_signal_spans, widget::SignalSpan,
 };
-use iced::widget::image;
+use iced::{
+    futures::{StreamExt as _, stream::FuturesOrdered},
+    widget::image,
+};
 use jiff::Timestamp;
 use mime::Mime;
 use presage::{
@@ -169,10 +172,12 @@ impl Message {
         is_from_store: bool,
         manager: &RegisteredManager,
     ) -> Self {
-        let mut a = Vec::new();
-        for ptr in attachments {
-            a.push(Attachment::new(ptr, manager).await);
-        }
+        let attachments = attachments
+            .into_iter()
+            .map(|ptr| Attachment::new(ptr, manager))
+            .collect::<FuturesOrdered<_>>()
+            .collect()
+            .await;
 
         let sticker = if let Some(ptr) = sticker.and_then(|sticker| sticker.data) {
             Some(Attachment::new(ptr, manager).await)
@@ -189,7 +194,7 @@ impl Message {
         Self {
             timestamp: Timestamp::from_millisecond(timestamp as i64).unwrap(),
             body: body_ranges_to_signal_spans(body, body_ranges),
-            attachments: a,
+            attachments,
             sender: cache.borrow()[&Thread::Contact(sender)].contact().unwrap(),
             sticker,
             quote,
@@ -346,13 +351,12 @@ async fn get_group_cached(
 
     let mut members = vec![];
 
-    for member in &group.members {
-        let member =
+    for member in group.members {
+        members.push(
             get_contact_cached(member.uuid, Some(member.profile_key.bytes), manager, cache)
                 .await?
-                .contact()?;
-
-        members.push(member);
+                .contact()?,
+        );
     }
 
     let group = Group {
