@@ -161,7 +161,7 @@ impl App {
                         .and_modify(|m| {
                             m.insert(message.timestamp, message.clone());
                         })
-                        .or_insert_with(|| [(message.timestamp, message.clone())].into());
+                        .or_insert_with(|| [(message.timestamp, message)].into());
                 }
                 MessageAction::Replace(old_ts, message) => {
                     self.chats.get_mut(&chat).unwrap().remove(&old_ts);

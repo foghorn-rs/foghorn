@@ -94,7 +94,7 @@ impl<'a, Link> SignalSpan<'a, Link> {
 impl<Link> Default for SignalSpan<'_, Link> {
     fn default() -> Self {
         Self {
-            text: Cow::default(),
+            text: Cow::Borrowed(""),
             flags: 0,
             link: None,
         }

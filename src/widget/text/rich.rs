@@ -28,8 +28,10 @@ pub struct SignalRich<'a, Link, Message> {
     wrapping: Wrapping,
     style: StyleFn<'a, Theme>,
     hovered_link: Option<usize>,
+    hovered_mention: Option<usize>,
     hovered_spoiler: Option<usize>,
     on_link_click: Option<Box<dyn Fn(Link) -> Message + 'a>>,
+    on_mention_click: Option<Box<dyn Fn(String) -> Message + 'a>>,
 }
 
 impl<'a, Link, Message> SignalRich<'a, Link, Message>
@@ -50,8 +52,10 @@ where
             wrapping: Wrapping::default(),
             style: Box::new(default),
             hovered_link: None,
+            hovered_mention: None,
             hovered_spoiler: None,
             on_link_click: None,
+            on_mention_click: None,
         }
     }
 
@@ -120,6 +124,13 @@ where
     /// is clicked.
     pub fn on_link_click(mut self, on_link_clicked: impl Fn(Link) -> Message + 'a) -> Self {
         self.on_link_click = Some(Box::new(on_link_clicked));
+        self
+    }
+
+    /// Sets the message that will be produced when a mention of the [`SignalRich`] text
+    /// is clicked.
+    pub fn on_mention_click(mut self, on_mention_clicked: impl Fn(String) -> Message + 'a) -> Self {
+        self.on_mention_click = Some(Box::new(on_mention_clicked));
         self
     }
 
@@ -212,10 +223,12 @@ where
 
         for (index, span) in self.spans.as_ref().as_ref().iter().enumerate() {
             let link_hovered = self.on_link_click.is_some() && Some(index) == self.hovered_link;
+            let mention_hovered =
+                self.on_mention_click.is_some() && Some(index) == self.hovered_mention;
             let spoiler_hovered = Some(index) == self.hovered_spoiler;
             let spoiler_revealed = state.revealed_spoilers.contains(&index);
 
-            if span.strikethrough() || span.spoiler() || link_hovered || spoiler_hovered {
+            if span.strikethrough() || span.spoiler() || span.mention() || link_hovered {
                 let translation = layout.position() - Point::ORIGIN;
                 let regions = state.paragraph.span_bounds(index);
 
@@ -231,6 +244,23 @@ where
                                 style.hovered_spoiler
                             } else {
                                 style.spoiler
+                            },
+                        );
+                    }
+                }
+
+                if span.mention() {
+                    for bounds in &regions {
+                        renderer.fill_quad(
+                            Quad {
+                                bounds: bounds.shrink([2, 0]) + translation,
+                                border: border::rounded(5),
+                                ..Default::default()
+                            },
+                            if mention_hovered {
+                                style.hovered_mention
+                            } else {
+                                style.mention
                             },
                         );
                     }
@@ -300,9 +330,11 @@ where
         _viewport: &Rectangle,
     ) {
         let link_was_hovered = self.hovered_link.is_some();
+        let mention_was_hovered = self.hovered_mention.is_some();
         let spoiler_was_hovered = self.hovered_spoiler.is_some();
 
         self.hovered_link = None;
+        self.hovered_mention = None;
         self.hovered_spoiler = None;
 
         if let Some(position) = cursor.position_in(layout.bounds()) {
@@ -312,6 +344,8 @@ where
                 if let Some(span) = self.spans.as_ref().as_ref().get(index) {
                     if span.link.is_some() {
                         self.hovered_link = Some(index);
+                    } else if span.mention() {
+                        self.hovered_mention = Some(index);
                     } else if span.spoiler() && !state.revealed_spoilers.contains(&index) {
                         self.hovered_spoiler = Some(index);
                     }
@@ -321,6 +355,7 @@ where
 
         if link_was_hovered != self.hovered_link.is_some()
             || spoiler_was_hovered != self.hovered_spoiler.is_some()
+            || mention_was_hovered != self.hovered_mention.is_some()
         {
             shell.request_redraw();
         }
@@ -331,6 +366,9 @@ where
 
                 if self.hovered_link.is_some() {
                     state.span_pressed = self.hovered_link;
+                    shell.capture_event();
+                } else if self.hovered_mention.is_some() {
+                    state.span_pressed = self.hovered_mention;
                     shell.capture_event();
                 } else if self.hovered_spoiler.is_some() {
                     state.span_pressed = self.hovered_spoiler;
@@ -351,6 +389,18 @@ where
                             .zip(self.on_link_click.as_deref())
                         {
                             shell.publish(on_link_clicked(link));
+                        }
+                    }
+                    Some(span) if Some(span) == self.hovered_mention => {
+                        if let Some((mention, on_mention_clicked)) = self
+                            .spans
+                            .as_ref()
+                            .as_ref()
+                            .get(span)
+                            .map(|span| span.text.clone().into_owned())
+                            .zip(self.on_mention_click.as_deref())
+                        {
+                            shell.publish(on_mention_clicked(mention));
                         }
                     }
                     Some(span) if Some(span) == self.hovered_spoiler => {
@@ -387,7 +437,10 @@ where
         _viewport: &Rectangle,
         _renderer: &Renderer,
     ) -> mouse::Interaction {
-        if self.hovered_link.is_some() || self.hovered_spoiler.is_some() {
+        if self.hovered_link.is_some()
+            || self.hovered_mention.is_some()
+            || self.hovered_spoiler.is_some()
+        {
             mouse::Interaction::Pointer
         } else {
             mouse::Interaction::None
@@ -544,6 +597,10 @@ pub struct Style {
     pub spoiler: Color,
     /// The [`Color`] of hovered spoilers.
     pub hovered_spoiler: Color,
+    /// The [`Color`] of mentions.
+    pub mention: Color,
+    /// The [`Color`] of hovered mentions.
+    pub hovered_mention: Color,
 }
 
 /// A styling function for a [`Text`].
@@ -558,5 +615,7 @@ pub fn default(theme: &Theme) -> Style {
         color: None,
         spoiler: palette.background.weak.color,
         hovered_spoiler: palette.background.weakest.color,
+        mention: palette.background.strong.color,
+        hovered_mention: palette.background.strongest.color,
     }
 }
