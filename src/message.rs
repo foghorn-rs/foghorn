@@ -172,13 +172,6 @@ impl Message {
         is_from_store: bool,
         manager: &RegisteredManager,
     ) -> Self {
-        let attachments = attachments
-            .into_iter()
-            .map(|ptr| Attachment::new(ptr, manager))
-            .collect::<FuturesOrdered<_>>()
-            .collect()
-            .await;
-
         let sticker = if let Some(ptr) = sticker.and_then(|sticker| sticker.data) {
             Some(Attachment::new(ptr, manager).await)
         } else {
@@ -194,7 +187,12 @@ impl Message {
         Self {
             timestamp: Timestamp::from_millisecond(timestamp as i64).unwrap(),
             body: body_ranges_to_signal_spans(body, body_ranges),
-            attachments,
+            attachments: attachments
+                .into_iter()
+                .map(|ptr| Attachment::new(ptr, manager))
+                .collect::<FuturesOrdered<_>>()
+                .collect()
+                .await,
             sender: cache.borrow()[&Thread::Contact(sender)].contact().unwrap(),
             sticker,
             quote,
@@ -217,15 +215,17 @@ impl Quote {
         cache: &RefCell<HashMap<Thread, Chat>>,
         manager: &RegisteredManager,
     ) -> Self {
-        let mut a = Vec::new();
-        for ptr in quote.attachments.iter().filter_map(|a| a.thumbnail.clone()) {
-            a.push(Attachment::new(ptr, manager).await);
-        }
-
         Self {
-            timestamp: Timestamp::from_millisecond(quote.id() as i64).unwrap(),
+            timestamp: Timestamp::from_millisecond(quote.id.unwrap_or_default() as i64).unwrap(),
             body: body_ranges_to_signal_spans(quote.text, quote.body_ranges),
-            attachments: a,
+            attachments: quote
+                .attachments
+                .into_iter()
+                .filter_map(|a| a.thumbnail)
+                .map(|ptr| Attachment::new(ptr, manager))
+                .collect::<FuturesOrdered<_>>()
+                .collect()
+                .await,
             sender: quote
                 .author_aci
                 .and_then(|sender| sender.parse().ok())

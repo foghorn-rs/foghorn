@@ -100,7 +100,11 @@ impl Message {
             .spacing(10);
 
         let content = container(content)
-            .max_width(650)
+            .max_width(if self.attachments.is_empty() {
+                650
+            } else {
+                335
+            })
             .padding(10)
             .style(|t| {
                 container::primary(t).border({
