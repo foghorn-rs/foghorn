@@ -1,5 +1,5 @@
 use crate::{
-    message::{Chat, Message, decode_content, ensure_self_exists},
+    message::{Chat, MessageAction, decode_content, ensure_self_exists},
     parse::markdown_to_body_ranges,
 };
 use iced::futures::{
@@ -30,8 +30,8 @@ pub type ManagerError = presage::Error<<SledStore as Store>::Error>;
 enum Event {
     LoadRegistered(oneshot::Sender<ManagerError>),
     LinkSecondary(oneshot::Sender<ManagerError>, oneshot::Sender<String>),
-    StreamMessages(mpsc::Sender<(Chat, Arc<Message>)>),
-    SendMessage(String, Chat, oneshot::Sender<(Chat, Arc<Message>)>),
+    StreamMessages(mpsc::Sender<(Chat, MessageAction)>),
+    SendMessage(String, Chat, oneshot::Sender<(Chat, MessageAction)>),
     Shutdown,
 }
 
@@ -90,7 +90,7 @@ impl ManagerManager {
         rx.await.ok()
     }
 
-    pub async fn stream_mesages(mut self) -> impl Stream<Item = (Chat, Arc<Message>)> {
+    pub async fn stream_mesages(mut self) -> impl Stream<Item = (Chat, MessageAction)> {
         let (tx, rx) = mpsc::channel(100);
 
         self.sender.send(Event::StreamMessages(tx)).await.unwrap();
@@ -98,7 +98,7 @@ impl ManagerManager {
         rx
     }
 
-    pub async fn send(mut self, content: String, chat: Chat) -> Option<(Chat, Arc<Message>)> {
+    pub async fn send(mut self, content: String, chat: Chat) -> Option<(Chat, MessageAction)> {
         let (tx, rx) = oneshot::channel();
 
         self.sender
@@ -162,63 +162,60 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Event>) {
             Event::StreamMessages(mut c) => {
                 let mut manager = manager.borrow().clone().unwrap();
                 let cache = cache.clone();
-                task::spawn_local(
-                    #[expect(clippy::large_stack_frames, reason = "what can we do about this?")]
-                    async move {
-                        let mut loading = true;
+                task::spawn_local(async move {
+                    let mut loading = true;
 
-                        ensure_self_exists(&mut manager, &cache).await;
+                    ensure_self_exists(&mut manager, &cache).await;
 
-                        for thread in manager
-                            .store()
-                            .contacts()
-                            .await
-                            .into_iter()
-                            .flatten()
-                            .flatten()
-                            .map(|c| Thread::Contact(c.uuid))
-                            .chain(
-                                manager
-                                    .store()
-                                    .groups()
-                                    .await
-                                    .into_iter()
-                                    .flatten()
-                                    .flatten()
-                                    .map(|g| Thread::Group(g.0)),
-                            )
-                        {
-                            for message in manager
+                    for thread in manager
+                        .store()
+                        .contacts()
+                        .await
+                        .into_iter()
+                        .flatten()
+                        .flatten()
+                        .map(|c| Thread::Contact(c.uuid))
+                        .chain(
+                            manager
                                 .store()
-                                .messages(&thread, ..)
+                                .groups()
                                 .await
                                 .into_iter()
                                 .flatten()
                                 .flatten()
+                                .map(|g| Thread::Group(g.0)),
+                        )
+                    {
+                        for message in manager
+                            .store()
+                            .messages(&thread, ..)
+                            .await
+                            .into_iter()
+                            .flatten()
+                            .flatten()
+                        {
+                            if let Some(message) =
+                                decode_content(message, &mut manager, &cache, loading).await
                             {
-                                if let Some(message) =
-                                    decode_content(message, &mut manager, &cache, loading).await
-                                {
-                                    c.send(message).await.unwrap();
-                                }
+                                c.send(message).await.unwrap();
                             }
                         }
+                    }
 
-                        let mut stream = manager.receive_messages().await.unwrap().boxed_local();
+                    let mut stream = manager.receive_messages().await.unwrap().boxed_local();
 
-                        while let Some(next) = stream.next().await {
-                            if let Received::Content(message) = next {
-                                if let Some(message) =
-                                    decode_content(*message, &mut manager, &cache, loading).await
-                                {
-                                    c.send(message).await.unwrap();
-                                }
-                            } else if matches!(next, Received::QueueEmpty) {
-                                loading = false;
+                    while let Some(next) = stream.next().await {
+                        if let Received::Content(message) = next {
+                            if let Some(message) =
+                                decode_content(*message, &mut manager, &cache, loading).await
+                            {
+                                c.send(message).await.unwrap();
                             }
+                        } else if matches!(next, Received::QueueEmpty) {
+                            loading = false;
                         }
-                    },
-                );
+                    }
+                });
             }
             Event::SendMessage(content, chat, c) => {
                 let mut manager = manager.borrow().clone().unwrap();

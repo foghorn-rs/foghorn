@@ -14,7 +14,8 @@ use presage::{
         zkgroup::{GroupMasterKeyBytes, ProfileKeyBytes},
     },
     proto::{
-        AttachmentPointer, BodyRange, DataMessage, GroupContextV2, SyncMessage, data_message,
+        AttachmentPointer, BodyRange, DataMessage, EditMessage, GroupContextV2, SyncMessage,
+        data_message::{self, Delete},
         sync_message::Sent,
     },
     store::{ContentsStore as _, Thread},
@@ -234,13 +235,247 @@ impl Quote {
     }
 }
 
+#[derive(Clone, Debug)]
+pub enum MessageAction {
+    Insert(Arc<Message>),
+    InsertNoNotif(Arc<Message>),
+    Replace(Timestamp, Arc<Message>),
+    Delete(Timestamp),
+}
+
 pub async fn decode_content(
     content: Content,
     manager: &mut RegisteredManager,
     cache: &RefCell<HashMap<Thread, Chat>>,
     is_from_store: bool,
-) -> Option<(Chat, Arc<Message>)> {
+) -> Option<(Chat, MessageAction)> {
     match (content.metadata, content.body) {
+        (
+            Metadata {
+                sender, timestamp, ..
+            },
+            ContentBody::EditMessage(EditMessage {
+                target_sent_timestamp,
+                data_message:
+                    Some(DataMessage {
+                        body,
+                        attachments,
+                        group_v2,
+                        profile_key,
+                        quote,
+                        sticker,
+                        body_ranges,
+                        ..
+                    }),
+            }),
+        ) => {
+            // a message edited not by us
+
+            let chat = if let Some(context) = group_v2 {
+                get_group_cached(context, manager, cache).await?
+            } else {
+                get_contact_cached(sender.raw_uuid(), profile_key.as_deref(), manager, cache)
+                    .await?
+            };
+
+            let message = Message::new(
+                timestamp,
+                body,
+                attachments,
+                sender.raw_uuid(),
+                sticker,
+                quote,
+                cache,
+                body_ranges,
+                is_from_store,
+                manager,
+            )
+            .await;
+
+            debug_assert!(!message.sender.is_self);
+
+            Some((
+                chat,
+                MessageAction::Replace(
+                    Timestamp::from_millisecond(target_sent_timestamp? as i64).unwrap(),
+                    message.into(),
+                ),
+            ))
+        }
+        (
+            Metadata {
+                sender, timestamp, ..
+            },
+            ContentBody::SynchronizeMessage(SyncMessage {
+                sent:
+                    Some(Sent {
+                        destination_service_id,
+                        edit_message:
+                            Some(EditMessage {
+                                target_sent_timestamp,
+                                data_message:
+                                    Some(DataMessage {
+                                        body,
+                                        attachments,
+                                        group_v2,
+                                        profile_key,
+                                        quote,
+                                        sticker,
+                                        body_ranges,
+                                        ..
+                                    }),
+                            }),
+                        ..
+                    }),
+                ..
+            }),
+        ) => {
+            // a message edited by us
+
+            let chat = if let Some(context) = group_v2 {
+                get_group_cached(context, manager, cache).await?
+            } else {
+                let uuid = destination_service_id?.parse().ok()?;
+                get_contact_cached(uuid, profile_key.as_deref(), manager, cache).await?
+            };
+
+            let message = Message::new(
+                timestamp,
+                body,
+                attachments,
+                sender.raw_uuid(),
+                sticker,
+                quote,
+                cache,
+                body_ranges,
+                is_from_store,
+                manager,
+            )
+            .await;
+
+            debug_assert!(message.sender.is_self);
+
+            Some((
+                chat,
+                MessageAction::Replace(
+                    Timestamp::from_millisecond(target_sent_timestamp? as i64).unwrap(),
+                    message.into(),
+                ),
+            ))
+        }
+        (
+            Metadata { sender, .. },
+            ContentBody::DataMessage(DataMessage {
+                group_v2,
+                profile_key,
+                delete: Some(Delete {
+                    target_sent_timestamp,
+                }),
+                ..
+            }),
+        ) => {
+            // a message deleted not by us
+
+            let chat = if let Some(context) = group_v2 {
+                get_group_cached(context, manager, cache).await?
+            } else {
+                get_contact_cached(sender.raw_uuid(), profile_key.as_deref(), manager, cache)
+                    .await?
+            };
+
+            Some((
+                chat,
+                MessageAction::Delete(
+                    Timestamp::from_millisecond(target_sent_timestamp? as i64).unwrap(),
+                ),
+            ))
+        }
+        (
+            _,
+            ContentBody::SynchronizeMessage(SyncMessage {
+                sent:
+                    Some(Sent {
+                        destination_service_id,
+                        message:
+                            Some(DataMessage {
+                                group_v2,
+                                profile_key,
+                                delete:
+                                    Some(Delete {
+                                        target_sent_timestamp,
+                                    }),
+                                ..
+                            }),
+                        ..
+                    }),
+                ..
+            }),
+        ) => {
+            // a message deleted by us
+
+            let chat = if let Some(context) = group_v2 {
+                get_group_cached(context, manager, cache).await?
+            } else {
+                let uuid = destination_service_id?.parse().ok()?;
+                get_contact_cached(uuid, profile_key.as_deref(), manager, cache).await?
+            };
+
+            Some((
+                chat,
+                MessageAction::Delete(
+                    Timestamp::from_millisecond(target_sent_timestamp? as i64).unwrap(),
+                ),
+            ))
+        }
+        (
+            Metadata {
+                sender, timestamp, ..
+            },
+            ContentBody::DataMessage(DataMessage {
+                body,
+                attachments,
+                group_v2,
+                profile_key,
+                quote,
+                sticker,
+                body_ranges,
+                ..
+            }),
+        ) => {
+            // a message sent not by us
+
+            let chat = if let Some(context) = group_v2 {
+                get_group_cached(context, manager, cache).await?
+            } else {
+                get_contact_cached(sender.raw_uuid(), profile_key.as_deref(), manager, cache)
+                    .await?
+            };
+
+            let message = Message::new(
+                timestamp,
+                body,
+                attachments,
+                sender.raw_uuid(),
+                sticker,
+                quote,
+                cache,
+                body_ranges,
+                is_from_store,
+                manager,
+            )
+            .await;
+
+            // debug_assert!(!message.sender.is_self);
+
+            Some((
+                chat,
+                if is_from_store {
+                    MessageAction::InsertNoNotif(message.into())
+                } else {
+                    MessageAction::Insert(message.into())
+                },
+            ))
+        }
         (
             Metadata {
                 sender, timestamp, ..
@@ -265,6 +500,8 @@ pub async fn decode_content(
                 ..
             }),
         ) => {
+            // a message sent by us
+
             let chat = if let Some(context) = group_v2 {
                 get_group_cached(context, manager, cache).await?
             } else {
@@ -284,49 +521,11 @@ pub async fn decode_content(
                 is_from_store,
                 manager,
             )
-            .await
-            .into();
+            .await;
 
-            Some((chat, message))
-        }
-        (
-            Metadata {
-                sender, timestamp, ..
-            },
-            ContentBody::DataMessage(DataMessage {
-                body,
-                attachments,
-                group_v2,
-                profile_key,
-                quote,
-                sticker,
-                body_ranges,
-                ..
-            }),
-        ) => {
-            let chat = if let Some(context) = group_v2 {
-                get_group_cached(context, manager, cache).await?
-            } else {
-                get_contact_cached(sender.raw_uuid(), profile_key.as_deref(), manager, cache)
-                    .await?
-            };
+            debug_assert!(message.sender.is_self);
 
-            let message = Message::new(
-                timestamp,
-                body,
-                attachments,
-                sender.raw_uuid(),
-                sticker,
-                quote,
-                cache,
-                body_ranges,
-                is_from_store,
-                manager,
-            )
-            .await
-            .into();
-
-            Some((chat, message))
+            Some((chat, MessageAction::InsertNoNotif(message.into())))
         }
         _ => None,
     }

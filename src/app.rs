@@ -1,7 +1,7 @@
 use crate::{
     dialog::{Action, Dialog},
     manager_manager::{ManagerError, ManagerManager},
-    message,
+    message::{self, MessageAction},
     widget::vsplit::{self, VSplit},
 };
 use iced::{
@@ -19,14 +19,20 @@ use iced::{
 use jiff::{Timestamp, tz::TimeZone};
 use notify_rust::Notification;
 use presage::libsignal_service::provisioning::ProvisioningError;
-use std::{cmp::Reverse, collections::HashMap, mem::take, sync::Arc, time::Duration};
+use std::{
+    cmp::Reverse,
+    collections::{BTreeMap, HashMap},
+    mem::take,
+    sync::Arc,
+    time::Duration,
+};
 
 #[derive(Clone, Debug)]
 pub enum Message {
     ManagerError(Option<Arc<ManagerError>>),
     QrCode(String),
     LinkSecondary,
-    Received((message::Chat, Arc<message::Message>)),
+    Received((message::Chat, MessageAction)),
     CloseDialog,
     Now(Timestamp),
     Tz(TimeZone),
@@ -41,7 +47,7 @@ pub enum Message {
 pub struct App {
     manager_manager: ManagerManager,
     dialog: Dialog,
-    chats: HashMap<message::Chat, Vec<Arc<message::Message>>>,
+    chats: HashMap<message::Chat, BTreeMap<Timestamp, Arc<message::Message>>>,
     now: Option<Timestamp>,
     tz: Option<TimeZone>,
     open_chat: Option<message::Chat>,
@@ -120,18 +126,15 @@ impl App {
                     Action::None,
                 );
             }
-            Message::Received((chat, message)) => {
-                self.chats
-                    .entry(chat)
-                    .and_modify(|m| {
-                        m.insert(
-                            m.partition_point(|m| m.timestamp <= message.timestamp),
-                            message.clone(),
-                        );
-                    })
-                    .or_insert_with(|| vec![message.clone()]);
+            Message::Received((chat, message)) => match message {
+                MessageAction::Insert(message) => {
+                    self.chats
+                        .entry(chat)
+                        .and_modify(|m| {
+                            m.insert(message.timestamp, message.clone());
+                        })
+                        .or_insert_with(|| [(message.timestamp, message.clone())].into());
 
-                if !message.sender.is_self && !message.is_from_store {
                     return Task::future(async move {
                         let body = message
                             .body
@@ -152,7 +155,25 @@ impl App {
                     })
                     .discard();
                 }
-            }
+                MessageAction::InsertNoNotif(message) => {
+                    self.chats
+                        .entry(chat)
+                        .and_modify(|m| {
+                            m.insert(message.timestamp, message.clone());
+                        })
+                        .or_insert_with(|| [(message.timestamp, message.clone())].into());
+                }
+                MessageAction::Replace(old_ts, message) => {
+                    self.chats.get_mut(&chat).unwrap().remove(&old_ts);
+                    self.chats
+                        .get_mut(&chat)
+                        .unwrap()
+                        .insert(message.timestamp, message);
+                }
+                MessageAction::Delete(timestamp) => {
+                    self.chats.get_mut(&chat).unwrap().remove(&timestamp);
+                }
+            },
             Message::CloseDialog => self.dialog.close(),
             Message::OpenChat(open_chat) => self.open_chat = Some(open_chat),
             Message::SplitAt(split_at) => self.split_at = split_at.clamp(170.0, 370.0),
@@ -160,7 +181,7 @@ impl App {
             Message::Tz(tz) => self.tz = Some(tz),
             Message::NextChat | Message::PreviousChat => {
                 let mut contacts = self.chats.keys().collect::<Vec<_>>();
-                contacts.sort_by_key(|c| Reverse(self.chats[c].last().map(|c| c.timestamp)));
+                contacts.sort_by_key(|c| Reverse(self.chats[c].last_key_value().map(|(k, _)| k)));
 
                 if let Some(open_chat) = self.open_chat.as_ref() {
                     if let Some(index) = contacts.iter().position(|chat| chat == &open_chat) {
@@ -197,7 +218,7 @@ impl App {
 
     pub fn view(&self) -> Element<'_, Message> {
         let mut contacts = self.chats.keys().collect::<Vec<_>>();
-        contacts.sort_by_key(|c| Reverse(self.chats[c].last().map(|c| c.timestamp)));
+        contacts.sort_by_key(|c| Reverse(self.chats[c].last_key_value().map(|(k, _)| k)));
         let contacts = column![
             "Chats",
             horizontal_rule(11),
@@ -226,7 +247,7 @@ impl App {
                 scrollable(
                     column(
                         self.chats[open_chat]
-                            .iter()
+                            .values()
                             .map(|chat| chat.as_iced_widget(&now, tz)),
                     )
                     .spacing(5),
