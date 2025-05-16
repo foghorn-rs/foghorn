@@ -248,7 +248,7 @@ impl App {
                     column(
                         self.chats[open_chat]
                             .values()
-                            .map(|chat| chat.as_iced_widget(&now, tz)),
+                            .map(|message| message.as_iced_widget(&now, tz)),
                     )
                     .spacing(5),
                 )

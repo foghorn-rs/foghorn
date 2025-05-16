@@ -157,7 +157,6 @@ pub struct Message {
     pub sticker: Option<Attachment>,
     pub sender: Arc<Contact>,
     pub quote: Option<Quote>,
-    pub is_from_store: bool,
 }
 
 impl Message {
@@ -170,7 +169,6 @@ impl Message {
         quote: Option<data_message::Quote>,
         cache: &RefCell<HashMap<Thread, Chat>>,
         body_ranges: Vec<BodyRange>,
-        is_from_store: bool,
         manager: &RegisteredManager,
     ) -> Self {
         let sticker = if let Some(ptr) = sticker.and_then(|sticker| sticker.data) {
@@ -197,7 +195,6 @@ impl Message {
             sender: cache.borrow()[&Thread::Contact(sender)].contact().unwrap(),
             sticker,
             quote,
-            is_from_store,
         }
     }
 }
@@ -287,7 +284,6 @@ pub async fn decode_content(
                 quote,
                 cache,
                 body_ranges,
-                is_from_store,
                 manager,
             )
             .await;
@@ -348,7 +344,6 @@ pub async fn decode_content(
                 quote,
                 cache,
                 body_ranges,
-                is_from_store,
                 manager,
             )
             .await;
@@ -460,7 +455,6 @@ pub async fn decode_content(
                 quote,
                 cache,
                 body_ranges,
-                is_from_store,
                 manager,
             )
             .await;
@@ -518,7 +512,6 @@ pub async fn decode_content(
                 quote,
                 cache,
                 body_ranges,
-                is_from_store,
                 manager,
             )
             .await;
