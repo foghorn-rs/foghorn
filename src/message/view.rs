@@ -1,7 +1,7 @@
 use super::{Chat, Message, Quote};
 use crate::widget::SignalRich;
 use iced::{
-    Alignment, Element, Fill, Shrink,
+    Alignment, Element, Shrink,
     border::{self, radius},
     widget::{Column, Row, column, container, horizontal_space, image, row, text, text::Wrapping},
 };
@@ -51,8 +51,9 @@ impl Quote {
             self.attachments
                 .first()
                 .and_then(|image| image.image.clone())
-                .map(|handle| image(handle).height(50)),
+                .map(|handle| container(image(handle)).max_height(50)),
         )
+        .align_y(Alignment::Center)
         .spacing(5);
 
         container(content)
@@ -118,12 +119,10 @@ impl Message {
             .into();
 
         let mut items = [
-            self.sender.avatar.clone().map(|handle| {
-                container(image(handle).height(50))
-                    .height(Fill)
-                    .align_y(Alignment::Start)
-                    .into()
-            }),
+            self.sender
+                .avatar
+                .clone()
+                .map(|handle| image(handle).height(50).into()),
             Some(content),
             Some(horizontal_space().into()),
         ];
@@ -133,7 +132,7 @@ impl Message {
         }
 
         row(items.into_iter().flatten())
-            .align_y(Alignment::Center)
+            .align_y(Alignment::Start)
             .height(Shrink)
             .spacing(5)
             .into()
