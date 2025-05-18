@@ -394,6 +394,6 @@ mod test {
                     spoiler_tag: Some(1)
                 },
             ]
-        )
+        );
     }
 }

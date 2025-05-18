@@ -459,7 +459,7 @@ pub async fn decode_content(
             )
             .await;
 
-            // debug_assert!(!message.sender.is_self);
+            debug_assert!(!message.sender.is_self);
 
             Some((
                 chat,
