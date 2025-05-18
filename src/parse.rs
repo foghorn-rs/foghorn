@@ -1,4 +1,4 @@
-use crate::widget::SignalSpan;
+use crate::widget::{SignalSpan, text::span::SPOILER};
 use presage::proto::{
     BodyRange,
     body_range::{AssociatedValue, Style},
@@ -199,17 +199,39 @@ pub fn body_ranges_to_signal_spans(
     let mut spans: Vec<SignalSpan<'static>> = vec![];
     let mut last_flag = flags[0];
     let in_progress_span = &mut String::new();
+    let mut spoiler_tag = None;
+    let mut next_spoiler_tag = 0;
 
     for (flag, c) in flags.iter().zip(body.chars()) {
         if last_flag != *flag {
-            spans.push(SignalSpan::new(take(in_progress_span)).flags(last_flag));
+            if last_flag & SPOILER != 0 {
+                spoiler_tag = Some(next_spoiler_tag);
+
+                if flag & SPOILER == 0 {
+                    next_spoiler_tag += 1;
+                }
+            }
+
+            spans.push(
+                SignalSpan::new(take(in_progress_span))
+                    .flags(last_flag)
+                    .spoiler_tag_maybe(spoiler_tag.take()),
+            );
             last_flag = *flag;
         }
 
         in_progress_span.push(c);
     }
 
-    spans.push(SignalSpan::new(take(in_progress_span)).flags(last_flag));
+    if last_flag & SPOILER != 0 {
+        spoiler_tag = Some(next_spoiler_tag);
+    }
+
+    spans.push(
+        SignalSpan::new(take(in_progress_span))
+            .flags(last_flag)
+            .spoiler_tag_maybe(spoiler_tag),
+    );
 
     Some(spans)
 }
@@ -223,12 +245,12 @@ mod test {
     #[test]
     fn test_happy() {
         let (output, ranges) = markdown_to_body_ranges(
-            r"testing ***rich text*** ~~(fancy \\\** escaping)~~ ||this is a `monospace spoiler||` ||",
+            r"testing ***rich text*** ~~(fancy \\\*\* escaping)~~ ||this is a `monospace spoiler||` ||*italic* **bold** ~~strikethrough~~ spoiler||",
         );
 
         assert_eq!(
             output,
-            r"testing rich text (fancy \** escaping) this is a monospace spoiler ||"
+            r"testing rich text (fancy \** escaping) this is a monospace spoiler italic bold strikethrough spoiler"
         );
 
         assert_eq!(
@@ -258,7 +280,27 @@ mod test {
                     start: Some(49),
                     length: Some(17),
                     associated_value: Some(AssociatedValue::Style(Style::Monospace as i32))
-                }
+                },
+                BodyRange {
+                    start: Some(67),
+                    length: Some(6),
+                    associated_value: Some(AssociatedValue::Style(Style::Italic as i32))
+                },
+                BodyRange {
+                    start: Some(74),
+                    length: Some(4),
+                    associated_value: Some(AssociatedValue::Style(Style::Bold as i32))
+                },
+                BodyRange {
+                    start: Some(79),
+                    length: Some(13),
+                    associated_value: Some(AssociatedValue::Style(Style::Strikethrough as i32))
+                },
+                BodyRange {
+                    start: Some(67),
+                    length: Some(33),
+                    associated_value: Some(AssociatedValue::Style(Style::Spoiler as i32))
+                },
             ]
         );
 
@@ -270,44 +312,88 @@ mod test {
                 SignalSpan {
                     text: Cow::Borrowed(r"testing "),
                     flags: 0,
-                    link: None
+                    link: None,
+                    spoiler_tag: None
                 },
                 SignalSpan {
                     text: Cow::Borrowed(r"rich text"),
                     flags: BOLD | ITALIC,
-                    link: None
+                    link: None,
+                    spoiler_tag: None
                 },
                 SignalSpan {
                     text: Cow::Borrowed(r" "),
                     flags: 0,
-                    link: None
+                    link: None,
+                    spoiler_tag: None
                 },
                 SignalSpan {
                     text: Cow::Borrowed(r"(fancy \** escaping)"),
                     flags: STRIKETHROUGH,
-                    link: None
+                    link: None,
+                    spoiler_tag: None
                 },
                 SignalSpan {
                     text: Cow::Borrowed(r" "),
                     flags: 0,
-                    link: None
+                    link: None,
+                    spoiler_tag: None
                 },
                 SignalSpan {
                     text: Cow::Borrowed(r"this is a "),
                     flags: SPOILER,
-                    link: None
+                    link: None,
+                    spoiler_tag: Some(0)
                 },
                 SignalSpan {
                     text: Cow::Borrowed(r"monospace spoiler"),
                     flags: SPOILER | MONOSPACE,
-                    link: None
+                    link: None,
+                    spoiler_tag: Some(0)
                 },
                 SignalSpan {
-                    text: Cow::Borrowed(r" ||"),
+                    text: Cow::Borrowed(r" "),
                     flags: 0,
-                    link: None
-                }
+                    link: None,
+                    spoiler_tag: None
+                },
+                SignalSpan {
+                    text: Cow::Borrowed(r"italic"),
+                    flags: SPOILER | ITALIC,
+                    link: None,
+                    spoiler_tag: Some(1)
+                },
+                SignalSpan {
+                    text: Cow::Borrowed(r" "),
+                    flags: SPOILER,
+                    link: None,
+                    spoiler_tag: Some(1)
+                },
+                SignalSpan {
+                    text: Cow::Borrowed(r"bold"),
+                    flags: SPOILER | BOLD,
+                    link: None,
+                    spoiler_tag: Some(1)
+                },
+                SignalSpan {
+                    text: Cow::Borrowed(r" "),
+                    flags: SPOILER,
+                    link: None,
+                    spoiler_tag: Some(1)
+                },
+                SignalSpan {
+                    text: Cow::Borrowed(r"strikethrough"),
+                    flags: SPOILER | STRIKETHROUGH,
+                    link: None,
+                    spoiler_tag: Some(1)
+                },
+                SignalSpan {
+                    text: Cow::Borrowed(r" spoiler"),
+                    flags: SPOILER,
+                    link: None,
+                    spoiler_tag: Some(1)
+                },
             ]
-        );
+        )
     }
 }

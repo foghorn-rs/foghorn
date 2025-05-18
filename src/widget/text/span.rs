@@ -22,6 +22,8 @@ pub struct SignalSpan<'a, Link = ()> {
     pub flags: u8,
     /// The link of the [`SignalSpan`].
     pub link: Option<Link>,
+    /// Allows spoiler [`Span`]s to be rendered as one.
+    pub spoiler_tag: Option<usize>,
 }
 
 impl<'a, Link> SignalSpan<'a, Link> {
@@ -48,6 +50,18 @@ impl<'a, Link> SignalSpan<'a, Link> {
     /// Sets the link of the [`SignalSpan`], if any.
     pub fn link_maybe(mut self, link: Option<impl Into<Link>>) -> Self {
         self.link = link.map(Into::into);
+        self
+    }
+
+    /// Sets the spoiler tag of the [`SignalSpan`].
+    pub fn spoiler_tag(mut self, tag: usize) -> Self {
+        self.spoiler_tag = Some(tag);
+        self
+    }
+
+    /// Sets the spoiler tag of the [`SignalSpan`], if any.
+    pub fn spoiler_tag_maybe(mut self, tag: Option<usize>) -> Self {
+        self.spoiler_tag = tag;
         self
     }
 
@@ -87,6 +101,7 @@ impl<'a, Link> SignalSpan<'a, Link> {
             text: Cow::Owned(self.text.into_owned()),
             flags: self.flags,
             link: self.link,
+            spoiler_tag: self.spoiler_tag,
         }
     }
 }
@@ -97,6 +112,7 @@ impl<Link> Default for SignalSpan<'_, Link> {
             text: Cow::Borrowed(""),
             flags: 0,
             link: None,
+            spoiler_tag: None,
         }
     }
 }
