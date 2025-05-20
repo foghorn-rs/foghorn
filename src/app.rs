@@ -287,21 +287,30 @@ impl App {
                     .on_action(Message::ContentEdit)
                     .key_binding(|key_press| {
                         let modifiers = key_press.modifiers;
-                        match text_editor::Binding::from_key_press(key_press) {
+                        let binding = text_editor::Binding::from_key_press(key_press);
+
+                        match binding {
                             Some(text_editor::Binding::Enter) if !modifiers.shift() => {
                                 Some(text_editor::Binding::Custom(Message::Send))
                             }
-                            Some(text_editor::Binding::Backspace) if modifiers.command() => {
-                                Some(text_editor::Binding::Sequence(vec![
-                                    text_editor::Binding::Select(text_editor::Motion::WordLeft),
-                                    text_editor::Binding::Backspace,
-                                ]))
-                            }
-                            Some(text_editor::Binding::Delete) if modifiers.command() => {
-                                Some(text_editor::Binding::Sequence(vec![
-                                    text_editor::Binding::Select(text_editor::Motion::WordRight),
-                                    text_editor::Binding::Delete,
-                                ]))
+                            Some(text_editor::Binding::Backspace)
+                            | Some(text_editor::Binding::Delete)
+                                if modifiers.command()
+                                    && self.message_content.selection().is_none() =>
+                            {
+                                if matches!(binding, Some(text_editor::Binding::Backspace)) {
+                                    Some(text_editor::Binding::Sequence(vec![
+                                        text_editor::Binding::Select(text_editor::Motion::WordLeft),
+                                        text_editor::Binding::Backspace,
+                                    ]))
+                                } else {
+                                    Some(text_editor::Binding::Sequence(vec![
+                                        text_editor::Binding::Select(
+                                            text_editor::Motion::WordRight,
+                                        ),
+                                        text_editor::Binding::Delete,
+                                    ]))
+                                }
                             }
                             binding => binding,
                         }
