@@ -1463,6 +1463,7 @@ version = "0.0.0"
 dependencies = [
  "iced",
  "iced_dialog",
+ "iced_split",
  "jiff",
  "mime",
  "notify-rust",
@@ -2183,6 +2184,15 @@ dependencies = [
  "iced_futures",
  "raw-window-handle",
  "thiserror 1.0.69",
+]
+
+[[package]]
+name = "iced_split"
+version = "0.1.0"
+source = "git+https://github.com/edwloef/iced_split?branch=main#912f69bac01634693f70343be540d29090ec71f4"
+dependencies = [
+ "iced_core",
+ "iced_widget",
 ]
 
 [[package]]

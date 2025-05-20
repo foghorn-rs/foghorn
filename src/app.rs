@@ -2,7 +2,6 @@ use crate::{
     dialog::{Action, Dialog},
     manager_manager::{ManagerError, ManagerManager},
     message::{self, SignalAction},
-    widget::vsplit::{self, VSplit},
 };
 use iced::{
     Element,
@@ -16,6 +15,7 @@ use iced::{
         text_editor,
     },
 };
+use iced_split::{Split, Strategy};
 use jiff::{Timestamp, tz::TimeZone};
 use notify_rust::Notification;
 use presage::libsignal_service::provisioning::ProvisioningError;
@@ -69,7 +69,7 @@ impl App {
                 tz: None,
                 open_chat: None,
                 message_content: text_editor::Content::new(),
-                split_at: 270.0,
+                split_at: 313.5,
             },
             Task::batch([
                 Task::perform(async { TimeZone::system() }, Message::Tz),
@@ -179,7 +179,7 @@ impl App {
             },
             Message::CloseDialog => self.dialog.close(),
             Message::OpenChat(open_chat) => self.open_chat = Some(open_chat),
-            Message::SplitAt(split_at) => self.split_at = split_at.clamp(170.0, 370.0),
+            Message::SplitAt(split_at) => self.split_at = split_at.clamp(153.0, 313.5),
             Message::Now(now) => self.now = Some(now),
             Message::Tz(tz) => self.tz = Some(tz),
             Message::NextChat | Message::PreviousChat => {
@@ -290,8 +290,8 @@ impl App {
             Element::new(horizontal_space())
         };
 
-        let base = VSplit::new(contacts, chat, self.split_at, Message::SplitAt)
-            .strategy(vsplit::Strategy::Left);
+        let base =
+            Split::new(contacts, chat, self.split_at, Message::SplitAt).strategy(Strategy::Start);
 
         let dialog = self
             .dialog
