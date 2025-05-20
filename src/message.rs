@@ -271,8 +271,7 @@ pub async fn decode_content(
             let chat = if let Some(context) = group_v2 {
                 get_group_cached(context, manager, cache).await?
             } else {
-                get_contact_cached(sender.raw_uuid(), profile_key.as_deref(), manager, cache)
-                    .await?
+                get_contact_cached(sender.raw_uuid(), profile_key?, manager, cache).await?
             };
 
             let message = Message::new(
@@ -332,7 +331,7 @@ pub async fn decode_content(
                 get_group_cached(context, manager, cache).await?
             } else {
                 let uuid = destination_service_id?.parse().ok()?;
-                get_contact_cached(uuid, profile_key.as_deref(), manager, cache).await?
+                get_contact_cached(uuid, profile_key?, manager, cache).await?
             };
 
             let message = Message::new(
@@ -374,8 +373,7 @@ pub async fn decode_content(
             let chat = if let Some(context) = group_v2 {
                 get_group_cached(context, manager, cache).await?
             } else {
-                get_contact_cached(sender.raw_uuid(), profile_key.as_deref(), manager, cache)
-                    .await?
+                get_contact_cached(sender.raw_uuid(), profile_key?, manager, cache).await?
             };
 
             Some((
@@ -412,7 +410,7 @@ pub async fn decode_content(
                 get_group_cached(context, manager, cache).await?
             } else {
                 let uuid = destination_service_id?.parse().ok()?;
-                get_contact_cached(uuid, profile_key.as_deref(), manager, cache).await?
+                get_contact_cached(uuid, profile_key?, manager, cache).await?
             };
 
             Some((
@@ -442,8 +440,7 @@ pub async fn decode_content(
             let chat = if let Some(context) = group_v2 {
                 get_group_cached(context, manager, cache).await?
             } else {
-                get_contact_cached(sender.raw_uuid(), profile_key.as_deref(), manager, cache)
-                    .await?
+                get_contact_cached(sender.raw_uuid(), profile_key?, manager, cache).await?
             };
 
             let message = Message::new(
@@ -500,7 +497,7 @@ pub async fn decode_content(
                 get_group_cached(context, manager, cache).await?
             } else {
                 let uuid = destination_service_id?.parse().ok()?;
-                get_contact_cached(uuid, profile_key.as_deref(), manager, cache).await?
+                get_contact_cached(uuid, profile_key?, manager, cache).await?
             };
 
             let message = Message::new(
@@ -545,7 +542,7 @@ async fn get_group_cached(
 
     for member in group.members {
         members.push(
-            get_contact_cached(member.uuid, Some(member.profile_key.bytes), manager, cache)
+            get_contact_cached(member.uuid, member.profile_key.bytes, manager, cache)
                 .await?
                 .contact()?,
         );
@@ -576,7 +573,7 @@ pub async fn ensure_self_exists(
 ) {
     get_contact_cached(
         manager.registration_data().service_ids.aci,
-        Some(manager.registration_data().profile_key().bytes),
+        manager.registration_data().profile_key().bytes,
         manager,
         cache,
     )
@@ -586,7 +583,7 @@ pub async fn ensure_self_exists(
 
 async fn get_contact_cached(
     uuid: Uuid,
-    profile_key: Option<impl TryInto<ProfileKeyBytes>>,
+    profile_key: impl TryInto<ProfileKeyBytes>,
     manager: &mut RegisteredManager,
     cache: &RefCell<HashMap<Thread, Chat>>,
 ) -> Option<Chat> {
@@ -596,7 +593,7 @@ async fn get_contact_cached(
         return Some(chat.clone());
     }
 
-    let profile_key = ProfileKey::create(profile_key?.try_into().ok()?);
+    let profile_key = ProfileKey::create(profile_key.try_into().ok()?);
 
     let contact = Contact {
         key: profile_key.bytes,
