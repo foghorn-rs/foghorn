@@ -17,7 +17,7 @@ use presage::{
     store::{ContentsStore as _, Store},
 };
 use presage_store_sled::{MigrationConflictStrategy, SledStore};
-use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Arc};
+use std::{cell::RefCell, collections::HashMap, pin::pin, rc::Rc, sync::Arc};
 use tokio::{
     runtime::Builder,
     task::{self, LocalSet},
@@ -169,7 +169,7 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Event>) {
                     sync_contacts(&mut manager, &cache, &mut c).await;
                     sync_messages(&mut manager, &cache, &mut c).await;
 
-                    let mut stream = manager.receive_messages().await.unwrap().boxed_local();
+                    let mut stream = pin!(manager.receive_messages().await.unwrap());
 
                     while let Some(next) = stream.next().await {
                         match next {
