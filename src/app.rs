@@ -39,6 +39,7 @@ pub enum Message {
     OpenChat(message::Chat),
     NextChat,
     PreviousChat,
+    Quote(Option<Arc<message::Message>>),
     SplitAt(f32),
     ContentEdit(text_editor::Action),
     Send,
@@ -52,7 +53,7 @@ pub struct App {
     tz: Option<TimeZone>,
     open_chat: Option<message::Chat>,
     message_content: text_editor::Content,
-    replying_to: Option<Arc<message::Message>>,
+    quote: Option<message::Quote>,
     split_at: f32,
 }
 
@@ -70,7 +71,7 @@ impl App {
                 tz: None,
                 open_chat: None,
                 message_content: text_editor::Content::new(),
-                replying_to: None,
+                quote: None,
                 split_at: 313.5,
             },
             Task::batch([
@@ -183,11 +184,8 @@ impl App {
             Message::OpenChat(open_chat) => {
                 self.open_chat = Some(open_chat);
                 self.message_content = text_editor::Content::new();
-                self.replying_to = None;
+                self.quote = None;
             }
-            Message::SplitAt(split_at) => self.split_at = split_at.clamp(153.0, 313.5),
-            Message::Now(now) => self.now = Some(now),
-            Message::Tz(tz) => self.tz = Some(tz),
             Message::NextChat => {
                 let mut contacts = self.chats.keys().collect::<Vec<_>>();
                 contacts.sort_by_key(|c| Reverse(self.chats[c].last_key_value().map(|(k, _)| k)));
@@ -214,14 +212,22 @@ impl App {
                     return self.update(Message::OpenChat(chat));
                 }
             }
+            Message::Quote(replying_to) => {
+                self.quote = replying_to.map(|quote| (*quote).clone().into());
+            }
+            Message::SplitAt(split_at) => self.split_at = split_at.clamp(153.0, 313.5),
+            Message::Now(now) => self.now = Some(now),
+            Message::Tz(tz) => self.tz = Some(tz),
             Message::ContentEdit(action) => self.message_content.perform(action),
             Message::Send => {
                 let content = take(&mut self.message_content).text();
 
                 let manager_manager = self.manager_manager.clone();
-                return Task::future(
-                    manager_manager.send(content, self.open_chat.clone().unwrap()),
-                )
+                return Task::future(manager_manager.send(
+                    self.open_chat.clone().unwrap(),
+                    content,
+                    self.quote.take(),
+                ))
                 .and_then(Task::done)
                 .map(Message::Received);
             }
@@ -256,7 +262,7 @@ impl App {
 
             column![
                 text(open_chat.name()),
-                horizontal_rule(11),
+                horizontal_rule(1),
                 scrollable(
                     column(
                         self.chats[open_chat]
@@ -268,7 +274,14 @@ impl App {
                 .height(Fill)
                 .anchor_bottom()
                 .spacing(0),
-                horizontal_rule(11),
+            ]
+            .push_maybe(
+                self.quote
+                    .as_ref()
+                    .map(|quote| quote.as_iced_widget(&now, tz)),
+            )
+            .push(horizontal_rule(1))
+            .push(
                 text_editor(&self.message_content)
                     .min_height(20)
                     .on_action(Message::ContentEdit)
@@ -293,7 +306,8 @@ impl App {
                             binding => binding,
                         }
                     }),
-            ]
+            )
+            .spacing(5)
             .padding(padding::all(5).left(0))
             .into()
         } else {

@@ -1,14 +1,17 @@
 use super::{Chat, Message, Quote};
-use crate::widget::SignalRich;
+use crate::{app, icons::reply, widget::SignalRich};
 use iced::{
-    Alignment, Element, Shrink,
+    Alignment, Element, Fill, Shrink,
     border::{self, radius},
-    widget::{Column, Row, column, container, horizontal_space, image, row, text, text::Wrapping},
+    widget::{
+        Column, Row, button, column, container, horizontal_space, image, row, text, text::Wrapping,
+    },
 };
 use jiff::{Span, Unit, Zoned, fmt::friendly::SpanPrinter, tz::TimeZone};
+use std::sync::Arc;
 
 impl Chat {
-    pub fn as_iced_widget<'a, M: 'a>(&'a self) -> Element<'a, M> {
+    pub fn as_iced_widget(&self) -> Element<'_, app::Message> {
         let name = match self {
             Self::Contact(contact) => {
                 if contact.is_self {
@@ -36,7 +39,7 @@ impl Chat {
 }
 
 impl Quote {
-    pub fn as_iced_widget<'a, M: 'a>(&'a self, now: &Zoned, tz: &TimeZone) -> Element<'a, M> {
+    pub fn as_iced_widget(&self, now: &Zoned, tz: &TimeZone) -> Element<'_, app::Message> {
         let timestamp = format_zoned(&self.timestamp.to_zoned(tz.clone()), now);
 
         let head = self
@@ -78,7 +81,11 @@ impl Quote {
 }
 
 impl Message {
-    pub fn as_iced_widget<'a, M: 'a>(&'a self, now: &Zoned, tz: &TimeZone) -> Element<'a, M> {
+    pub fn as_iced_widget(
+        self: &Arc<Self>,
+        now: &Zoned,
+        tz: &TimeZone,
+    ) -> Element<'_, app::Message> {
         let timestamp = format_zoned(&self.timestamp.to_zoned(tz.clone()), now);
 
         let head = self.sender.name.clone() + ", " + &timestamp;
@@ -130,6 +137,16 @@ impl Message {
                 .clone()
                 .map(|handle| image(handle).height(50).into()),
             Some(content),
+            Some(
+                row![
+                    button(reply())
+                        .style(button::text)
+                        .on_press(app::Message::Quote(Some(self.clone()))),
+                ]
+                .height(Fill)
+                .align_y(Alignment::Center)
+                .into(),
+            ),
             Some(horizontal_space().into()),
         ];
 

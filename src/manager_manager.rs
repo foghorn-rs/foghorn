@@ -1,5 +1,5 @@
 use crate::{
-    message::{Chat, SignalAction, decode_content, sync_contacts, sync_messages},
+    message::{Chat, Quote, SignalAction, decode_content, sync_contacts, sync_messages},
     parse::markdown_to_body_ranges,
 };
 use iced::futures::{
@@ -13,7 +13,14 @@ use presage::{
     },
     manager::{Linking, Registered},
     model::{identity::OnNewIdentity, messages::Received},
-    proto::{DataMessage, SyncMessage, sync_message::Sent},
+    proto::{
+        DataMessage, SyncMessage,
+        data_message::{
+            self,
+            quote::{self, QuotedAttachment},
+        },
+        sync_message::Sent,
+    },
     store::{ContentsStore as _, Store},
 };
 use presage_store_sled::{MigrationConflictStrategy, SledStore};
@@ -31,7 +38,12 @@ enum Event {
     LoadRegistered(oneshot::Sender<ManagerError>),
     LinkSecondary(oneshot::Sender<ManagerError>, oneshot::Sender<String>),
     StreamMessages(mpsc::Sender<(Chat, SignalAction)>),
-    SendMessage(String, Chat, oneshot::Sender<(Chat, SignalAction)>),
+    SendMessage(
+        Chat,
+        String,
+        Option<Quote>,
+        oneshot::Sender<(Chat, SignalAction)>,
+    ),
     Shutdown,
 }
 
@@ -98,11 +110,16 @@ impl ManagerManager {
         rx
     }
 
-    pub async fn send(mut self, content: String, chat: Chat) -> Option<(Chat, SignalAction)> {
+    pub async fn send(
+        mut self,
+        chat: Chat,
+        content: String,
+        quote: Option<Quote>,
+    ) -> Option<(Chat, SignalAction)> {
         let (tx, rx) = oneshot::channel();
 
         self.sender
-            .send(Event::SendMessage(content, chat, tx))
+            .send(Event::SendMessage(chat, content, quote, tx))
             .await
             .unwrap();
 
@@ -186,7 +203,7 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Event>) {
                     }
                 });
             }
-            Event::SendMessage(content, chat, c) => {
+            Event::SendMessage(chat, content, quote, c) => {
                 let mut manager = manager.borrow().clone().unwrap();
                 let cache = cache.clone();
                 task::spawn_local(async move {
@@ -211,7 +228,25 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Event>) {
                         attachments: Vec::new(),
                         group_v2: chat.group_context(),
                         profile_key: chat.profile_key().map(Into::into),
-                        quote: None,
+                        quote: quote.map(|quote| data_message::Quote {
+                            id: Some(quote.timestamp.as_millisecond() as u64),
+                            author_aci: quote.sender.map(|sender| sender.uuid.to_string()),
+                            text: quote
+                                .body
+                                .as_ref()
+                                .map(|body| body.iter().map(|x| &*x.text).collect::<String>()),
+                            attachments: quote
+                                .attachments
+                                .into_iter()
+                                .map(|attachment| QuotedAttachment {
+                                    content_type: Some(attachment.mime.to_string()),
+                                    file_name: None,
+                                    thumbnail: Some(attachment.ptr),
+                                })
+                                .collect(),
+                            body_ranges: vec![],
+                            r#type: Some(quote::Type::Normal as i32),
+                        }),
                         body_ranges: body_ranges.clone(),
                         ..Default::default()
                     };

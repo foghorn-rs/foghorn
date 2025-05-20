@@ -125,7 +125,7 @@ impl Hash for Group {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Attachment {
     pub ptr: AttachmentPointer,
     pub mime: Mime,
@@ -149,7 +149,7 @@ impl Attachment {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Message {
     pub timestamp: Timestamp,
     pub body: Option<Vec<SignalSpan<'static>>>,
@@ -199,7 +199,7 @@ impl Message {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Quote {
     pub timestamp: Timestamp,
     pub body: Option<Vec<SignalSpan<'static>>>,
@@ -228,6 +228,17 @@ impl Quote {
                 .author_aci
                 .and_then(|sender| sender.parse().ok())
                 .and_then(|sender| cache.borrow().get(&Thread::Contact(sender))?.contact()),
+        }
+    }
+}
+
+impl From<Message> for Quote {
+    fn from(value: Message) -> Self {
+        Self {
+            timestamp: value.timestamp,
+            body: value.body,
+            attachments: value.attachments,
+            sender: Some(value.sender),
         }
     }
 }
