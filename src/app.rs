@@ -52,6 +52,7 @@ pub struct App {
     tz: Option<TimeZone>,
     open_chat: Option<message::Chat>,
     message_content: text_editor::Content,
+    replying_to: Option<Arc<message::Message>>,
     split_at: f32,
 }
 
@@ -69,6 +70,7 @@ impl App {
                 tz: None,
                 open_chat: None,
                 message_content: text_editor::Content::new(),
+                replying_to: None,
                 split_at: 313.5,
             },
             Task::batch([
@@ -178,30 +180,38 @@ impl App {
                 }
             },
             Message::CloseDialog => self.dialog.close(),
-            Message::OpenChat(open_chat) => self.open_chat = Some(open_chat),
+            Message::OpenChat(open_chat) => {
+                self.open_chat = Some(open_chat);
+                self.message_content = text_editor::Content::new();
+                self.replying_to = None;
+            }
             Message::SplitAt(split_at) => self.split_at = split_at.clamp(153.0, 313.5),
             Message::Now(now) => self.now = Some(now),
             Message::Tz(tz) => self.tz = Some(tz),
-            Message::NextChat | Message::PreviousChat => {
+            Message::NextChat => {
                 let mut contacts = self.chats.keys().collect::<Vec<_>>();
                 contacts.sort_by_key(|c| Reverse(self.chats[c].last_key_value().map(|(k, _)| k)));
 
+                let mut iter = contacts.iter().chain(contacts.iter());
                 if let Some(open_chat) = self.open_chat.as_ref() {
-                    if let Some(index) = contacts.iter().position(|chat| chat == &open_chat) {
-                        self.open_chat = if matches!(message, Message::NextChat) {
-                            Some(contacts[(index + 1) % contacts.len()].clone())
-                        } else if index == 0 {
-                            Some((*contacts.last().expect("Contacts must not be empty")).clone())
-                        } else {
-                            Some(contacts[index - 1].clone())
-                        }
-                    }
-                } else if !contacts.is_empty() {
-                    self.open_chat = if matches!(message, Message::NextChat) {
-                        Some(contacts[0].clone())
-                    } else {
-                        Some((*contacts.last().expect("Contacts must not be empty")).clone())
-                    }
+                    iter.by_ref().find(|chat| **chat == open_chat);
+                }
+
+                if let Some(chat) = iter.next().copied().cloned() {
+                    return self.update(Message::OpenChat(chat));
+                }
+            }
+            Message::PreviousChat => {
+                let mut contacts = self.chats.keys().collect::<Vec<_>>();
+                contacts.sort_by_key(|c| Reverse(self.chats[c].last_key_value().map(|(k, _)| k)));
+
+                let mut iter = contacts.iter().chain(contacts.iter());
+                if let Some(open_chat) = self.open_chat.as_ref() {
+                    iter.by_ref().rfind(|chat| **chat == open_chat);
+                }
+
+                if let Some(chat) = iter.next_back().copied().cloned() {
+                    return self.update(Message::OpenChat(chat));
                 }
             }
             Message::ContentEdit(action) => self.message_content.perform(action),
