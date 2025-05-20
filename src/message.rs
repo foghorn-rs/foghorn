@@ -2,7 +2,7 @@ use crate::{
     manager_manager::RegisteredManager, parse::body_ranges_to_signal_spans, widget::SignalSpan,
 };
 use iced::{
-    futures::{StreamExt as _, stream::FuturesOrdered},
+    futures::{SinkExt as _, StreamExt as _, channel::mpsc, stream::FuturesOrdered},
     widget::image,
 };
 use jiff::Timestamp;
@@ -233,11 +233,105 @@ impl Quote {
 }
 
 #[derive(Clone, Debug)]
-pub enum MessageAction {
-    Insert(Arc<Message>),
-    InsertNoNotif(Arc<Message>),
+pub enum SignalAction {
+    Contact,
+    Message(Arc<Message>),
+    MessageNoNotif(Arc<Message>),
     Replace(Timestamp, Arc<Message>),
     Delete(Timestamp),
+}
+
+pub async fn sync_contacts(
+    manager: &mut RegisteredManager,
+    cache: &RefCell<HashMap<Thread, Chat>>,
+    c: &mut mpsc::Sender<(Chat, SignalAction)>,
+) {
+    let me = get_contact_cached(
+        manager.registration_data().service_ids.aci,
+        manager.registration_data().profile_key().bytes,
+        manager,
+        cache,
+    )
+    .await
+    .unwrap();
+    c.send((me, SignalAction::Contact)).await.unwrap();
+
+    for contact in manager
+        .store()
+        .contacts()
+        .await
+        .into_iter()
+        .flatten()
+        .flatten()
+    {
+        if let Some(contact) =
+            get_contact_cached(contact.uuid, contact.profile_key, manager, cache).await
+        {
+            c.send((contact, SignalAction::Contact)).await.unwrap();
+        }
+    }
+
+    for group in manager
+        .store()
+        .groups()
+        .await
+        .into_iter()
+        .flatten()
+        .flatten()
+    {
+        if let Some(group) = get_group_cached(
+            GroupContextV2 {
+                revision: Some(group.1.revision),
+                master_key: Some(group.0.into()),
+                group_change: None,
+            },
+            manager,
+            cache,
+        )
+        .await
+        {
+            c.send((group, SignalAction::Contact)).await.unwrap();
+        }
+    }
+}
+
+pub async fn sync_messages(
+    manager: &mut RegisteredManager,
+    cache: &RefCell<HashMap<Thread, Chat>>,
+    c: &mut mpsc::Sender<(Chat, SignalAction)>,
+) {
+    for thread in manager
+        .store()
+        .contacts()
+        .await
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|c| Thread::Contact(c.uuid))
+        .chain(
+            manager
+                .store()
+                .groups()
+                .await
+                .into_iter()
+                .flatten()
+                .flatten()
+                .map(|g| Thread::Group(g.0)),
+        )
+    {
+        for message in manager
+            .store()
+            .messages(&thread, ..)
+            .await
+            .into_iter()
+            .flatten()
+            .flatten()
+        {
+            if let Some(message) = decode_content(message, manager, cache, true).await {
+                c.send(message).await.unwrap();
+            }
+        }
+    }
 }
 
 pub async fn decode_content(
@@ -245,7 +339,7 @@ pub async fn decode_content(
     manager: &mut RegisteredManager,
     cache: &RefCell<HashMap<Thread, Chat>>,
     is_from_store: bool,
-) -> Option<(Chat, MessageAction)> {
+) -> Option<(Chat, SignalAction)> {
     match (content.metadata, content.body) {
         (
             Metadata {
@@ -291,7 +385,7 @@ pub async fn decode_content(
 
             Some((
                 chat,
-                MessageAction::Replace(
+                SignalAction::Replace(
                     Timestamp::from_millisecond(target_sent_timestamp? as i64).unwrap(),
                     message.into(),
                 ),
@@ -351,7 +445,7 @@ pub async fn decode_content(
 
             Some((
                 chat,
-                MessageAction::Replace(
+                SignalAction::Replace(
                     Timestamp::from_millisecond(target_sent_timestamp? as i64).unwrap(),
                     message.into(),
                 ),
@@ -378,7 +472,7 @@ pub async fn decode_content(
 
             Some((
                 chat,
-                MessageAction::Delete(
+                SignalAction::Delete(
                     Timestamp::from_millisecond(target_sent_timestamp? as i64).unwrap(),
                 ),
             ))
@@ -415,7 +509,7 @@ pub async fn decode_content(
 
             Some((
                 chat,
-                MessageAction::Delete(
+                SignalAction::Delete(
                     Timestamp::from_millisecond(target_sent_timestamp? as i64).unwrap(),
                 ),
             ))
@@ -461,9 +555,9 @@ pub async fn decode_content(
             Some((
                 chat,
                 if is_from_store {
-                    MessageAction::InsertNoNotif(message.into())
+                    SignalAction::MessageNoNotif(message.into())
                 } else {
-                    MessageAction::Insert(message.into())
+                    SignalAction::Message(message.into())
                 },
             ))
         }
@@ -515,7 +609,7 @@ pub async fn decode_content(
 
             debug_assert!(message.sender.is_self);
 
-            Some((chat, MessageAction::InsertNoNotif(message.into())))
+            Some((chat, SignalAction::MessageNoNotif(message.into())))
         }
         _ => None,
     }
@@ -565,20 +659,6 @@ async fn get_group_cached(
         .insert(chat.clone(), Chat::Group(group.into()));
 
     Some(cache.borrow()[&chat].clone())
-}
-
-pub async fn ensure_self_exists(
-    manager: &mut RegisteredManager,
-    cache: &RefCell<HashMap<Thread, Chat>>,
-) {
-    get_contact_cached(
-        manager.registration_data().service_ids.aci,
-        manager.registration_data().profile_key().bytes,
-        manager,
-        cache,
-    )
-    .await
-    .unwrap();
 }
 
 async fn get_contact_cached(

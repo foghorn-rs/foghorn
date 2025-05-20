@@ -1,7 +1,7 @@
 use crate::{
     dialog::{Action, Dialog},
     manager_manager::{ManagerError, ManagerManager},
-    message::{self, MessageAction},
+    message::{self, SignalAction},
     widget::vsplit::{self, VSplit},
 };
 use iced::{
@@ -32,7 +32,7 @@ pub enum Message {
     ManagerError(Option<Arc<ManagerError>>),
     QrCode(String),
     LinkSecondary,
-    Received((message::Chat, MessageAction)),
+    Received((message::Chat, SignalAction)),
     CloseDialog,
     Now(Timestamp),
     Tz(TimeZone),
@@ -127,7 +127,10 @@ impl App {
                 );
             }
             Message::Received((chat, message)) => match message {
-                MessageAction::Insert(message) => {
+                SignalAction::Contact => {
+                    self.chats.entry(chat).or_insert_with(|| [].into());
+                }
+                SignalAction::Message(message) => {
                     self.chats
                         .entry(chat)
                         .and_modify(|m| {
@@ -155,7 +158,7 @@ impl App {
                     })
                     .discard();
                 }
-                MessageAction::InsertNoNotif(message) => {
+                SignalAction::MessageNoNotif(message) => {
                     self.chats
                         .entry(chat)
                         .and_modify(|m| {
@@ -163,14 +166,14 @@ impl App {
                         })
                         .or_insert_with(|| [(message.timestamp, message)].into());
                 }
-                MessageAction::Replace(old_ts, message) => {
+                SignalAction::Replace(old_ts, message) => {
                     self.chats.get_mut(&chat).unwrap().remove(&old_ts);
                     self.chats
                         .get_mut(&chat)
                         .unwrap()
                         .insert(message.timestamp, message);
                 }
-                MessageAction::Delete(timestamp) => {
+                SignalAction::Delete(timestamp) => {
                     self.chats.get_mut(&chat).unwrap().remove(&timestamp);
                 }
             },

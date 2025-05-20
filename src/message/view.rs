@@ -10,7 +10,13 @@ use jiff::{Span, Unit, Zoned, fmt::friendly::SpanPrinter, tz::TimeZone};
 impl Chat {
     pub fn as_iced_widget<'a, M: 'a>(&'a self) -> Element<'a, M> {
         let name = match self {
-            Self::Contact(contact) => &contact.name,
+            Self::Contact(contact) => {
+                if contact.is_self {
+                    "Note to Self"
+                } else {
+                    &contact.name
+                }
+            }
             Self::Group(group) => &group.title,
         };
 

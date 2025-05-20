@@ -1,5 +1,5 @@
 use crate::{
-    message::{Chat, MessageAction, decode_content, ensure_self_exists},
+    message::{Chat, SignalAction, decode_content, sync_contacts, sync_messages},
     parse::markdown_to_body_ranges,
 };
 use iced::futures::{
@@ -14,7 +14,7 @@ use presage::{
     manager::{Linking, Registered},
     model::{identity::OnNewIdentity, messages::Received},
     proto::{DataMessage, SyncMessage, sync_message::Sent},
-    store::{ContentsStore as _, Store, Thread},
+    store::{ContentsStore as _, Store},
 };
 use presage_store_sled::{MigrationConflictStrategy, SledStore};
 use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Arc};
@@ -30,8 +30,8 @@ pub type ManagerError = presage::Error<<SledStore as Store>::Error>;
 enum Event {
     LoadRegistered(oneshot::Sender<ManagerError>),
     LinkSecondary(oneshot::Sender<ManagerError>, oneshot::Sender<String>),
-    StreamMessages(mpsc::Sender<(Chat, MessageAction)>),
-    SendMessage(String, Chat, oneshot::Sender<(Chat, MessageAction)>),
+    StreamMessages(mpsc::Sender<(Chat, SignalAction)>),
+    SendMessage(String, Chat, oneshot::Sender<(Chat, SignalAction)>),
     Shutdown,
 }
 
@@ -90,7 +90,7 @@ impl ManagerManager {
         rx.await.ok()
     }
 
-    pub async fn stream_mesages(mut self) -> impl Stream<Item = (Chat, MessageAction)> {
+    pub async fn stream_mesages(mut self) -> impl Stream<Item = (Chat, SignalAction)> {
         let (tx, rx) = mpsc::channel(100);
 
         self.sender.send(Event::StreamMessages(tx)).await.unwrap();
@@ -98,7 +98,7 @@ impl ManagerManager {
         rx
     }
 
-    pub async fn send(mut self, content: String, chat: Chat) -> Option<(Chat, MessageAction)> {
+    pub async fn send(mut self, content: String, chat: Chat) -> Option<(Chat, SignalAction)> {
         let (tx, rx) = oneshot::channel();
 
         self.sender
@@ -161,54 +161,29 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Event>) {
                 task::spawn_local(async move {
                     let mut loading = true;
 
-                    ensure_self_exists(&mut manager, &cache).await;
-
-                    for thread in manager
-                        .store()
-                        .contacts()
-                        .await
-                        .into_iter()
-                        .flatten()
-                        .flatten()
-                        .map(|c| Thread::Contact(c.uuid))
-                        .chain(
-                            manager
-                                .store()
-                                .groups()
-                                .await
-                                .into_iter()
-                                .flatten()
-                                .flatten()
-                                .map(|g| Thread::Group(g.0)),
-                        )
                     {
-                        for message in manager
-                            .store()
-                            .messages(&thread, ..)
-                            .await
-                            .into_iter()
-                            .flatten()
-                            .flatten()
-                        {
-                            if let Some(message) =
-                                decode_content(message, &mut manager, &cache, loading).await
-                            {
-                                c.send(message).await.unwrap();
-                            }
-                        }
+                        let mut manager = manager.clone();
+                        task::spawn_local(async move { manager.request_contacts().await });
                     }
+
+                    sync_contacts(&mut manager, &cache, &mut c).await;
+                    sync_messages(&mut manager, &cache, &mut c).await;
 
                     let mut stream = manager.receive_messages().await.unwrap().boxed_local();
 
                     while let Some(next) = stream.next().await {
-                        if let Received::Content(message) = next {
-                            if let Some(message) =
-                                decode_content(*message, &mut manager, &cache, loading).await
-                            {
-                                c.send(message).await.unwrap();
+                        match next {
+                            Received::Content(content) => {
+                                if let Some(message) =
+                                    decode_content(*content, &mut manager, &cache, loading).await
+                                {
+                                    c.send(message).await.unwrap();
+                                }
                             }
-                        } else if matches!(next, Received::QueueEmpty) {
-                            loading = false;
+                            Received::QueueEmpty => loading = false,
+                            Received::Contacts => {
+                                sync_contacts(&mut manager, &cache, &mut c).await;
+                            }
                         }
                     }
                 });
@@ -244,21 +219,23 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Event>) {
                     };
 
                     match &chat {
-                        Chat::Contact(contact) => Box::pin(manager.send_message(
-                            Aci::from(contact.uuid),
-                            message.clone(),
-                            metadata.timestamp,
-                        ))
-                        .await
-                        .unwrap(),
-                        Chat::Group(group) => {
-                            Box::pin(manager.send_message_to_group(
-                                &group.key,
+                        Chat::Contact(contact) => manager
+                            .send_message(
+                                Aci::from(contact.uuid),
                                 message.clone(),
                                 metadata.timestamp,
-                            ))
+                            )
                             .await
-                            .unwrap();
+                            .unwrap(),
+                        Chat::Group(group) => {
+                            manager
+                                .send_message_to_group(
+                                    &group.key,
+                                    message.clone(),
+                                    metadata.timestamp,
+                                )
+                                .await
+                                .unwrap();
                         }
                     }
 
