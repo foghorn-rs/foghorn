@@ -159,7 +159,7 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Event>) {
                 let mut manager = manager.borrow().clone().unwrap();
                 let cache = cache.clone();
                 task::spawn_local(async move {
-                    let mut loading = true;
+                    let mut synced = false;
 
                     {
                         let mut manager = manager.clone();
@@ -175,12 +175,12 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Event>) {
                         match next {
                             Received::Content(content) => {
                                 if let Some(message) =
-                                    decode_content(*content, &mut manager, &cache, loading).await
+                                    decode_content(*content, &mut manager, &cache, synced).await
                                 {
                                     c.send(message).await.unwrap();
                                 }
                             }
-                            Received::QueueEmpty => loading = false,
+                            Received::QueueEmpty => synced = true,
                             Received::Contacts => {
                                 sync_contacts(&mut manager, &cache, &mut c).await;
                             }

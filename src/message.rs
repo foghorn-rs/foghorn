@@ -327,7 +327,7 @@ pub async fn sync_messages(
             .flatten()
             .flatten()
         {
-            if let Some(message) = decode_content(message, manager, cache, true).await {
+            if let Some(message) = decode_content(message, manager, cache, false).await {
                 c.send(message).await.unwrap();
             }
         }
@@ -338,7 +338,7 @@ pub async fn decode_content(
     content: Content,
     manager: &mut RegisteredManager,
     cache: &RefCell<HashMap<Thread, Chat>>,
-    is_from_store: bool,
+    synced: bool,
 ) -> Option<(Chat, SignalAction)> {
     match (content.metadata, content.body) {
         (
@@ -554,10 +554,10 @@ pub async fn decode_content(
 
             Some((
                 chat,
-                if is_from_store {
-                    SignalAction::MessageNoNotif(message.into())
-                } else {
+                if synced {
                     SignalAction::Message(message.into())
+                } else {
+                    SignalAction::MessageNoNotif(message.into())
                 },
             ))
         }
