@@ -15,7 +15,10 @@ use presage::{
     },
     proto::{
         AttachmentPointer, BodyRange, DataMessage, EditMessage, GroupContextV2, SyncMessage,
-        data_message::{self, Delete},
+        data_message::{
+            self, Delete,
+            quote::{self, QuotedAttachment},
+        },
         sync_message::Sent,
     },
     store::{ContentsStore as _, Thread},
@@ -239,6 +242,30 @@ impl From<Message> for Quote {
             body: value.body,
             attachments: value.attachments,
             sender: Some(value.sender),
+        }
+    }
+}
+
+impl From<Quote> for data_message::Quote {
+    fn from(value: Quote) -> Self {
+        Self {
+            id: Some(value.timestamp.as_millisecond() as u64),
+            author_aci: value.sender.map(|sender| sender.uuid.to_string()),
+            text: value
+                .body
+                .as_ref()
+                .map(|body| body.iter().map(|x| &*x.text).collect::<String>()),
+            attachments: value
+                .attachments
+                .into_iter()
+                .map(|attachment| QuotedAttachment {
+                    content_type: Some(attachment.mime.to_string()),
+                    file_name: None,
+                    thumbnail: Some(attachment.ptr),
+                })
+                .collect(),
+            body_ranges: vec![],
+            r#type: Some(quote::Type::Normal as i32),
         }
     }
 }
