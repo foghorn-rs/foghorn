@@ -383,6 +383,14 @@ pub async fn decode_content(
 
             debug_assert!(!message.sender.is_self);
 
+            // delete the old message, so we don't load it again when starting up the next time
+            manager
+                .store()
+                .clone()
+                .delete_message(&chat.thread(), target_sent_timestamp?)
+                .await
+                .ok()?;
+
             Some((
                 chat,
                 SignalAction::Replace(
@@ -442,6 +450,14 @@ pub async fn decode_content(
             .await;
 
             debug_assert!(message.sender.is_self);
+
+            // delete the old message, so we don't load it again when starting up the next time
+            manager
+                .store()
+                .clone()
+                .delete_message(&chat.thread(), target_sent_timestamp?)
+                .await
+                .ok()?;
 
             Some((
                 chat,
@@ -529,7 +545,7 @@ pub async fn decode_content(
                 ..
             }),
         ) => {
-            // a message sent not by us
+            // a message sent not by us, or previously edited by us
 
             let chat = if let Some(context) = group_v2 {
                 get_group_cached(context, manager, cache).await?
@@ -549,8 +565,6 @@ pub async fn decode_content(
                 manager,
             )
             .await;
-
-            debug_assert!(!message.sender.is_self);
 
             Some((
                 chat,
