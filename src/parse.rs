@@ -34,9 +34,8 @@ pub fn markdown_to_body_ranges(input: &str) -> (String, Vec<BodyRange>) {
 
     while let Some(ch) = iter.next() {
         match ch {
-            '*' if iter.peek() == Some(&'*') => {
+            '*' if iter.next_if_eq(&'*').is_some() => {
                 // we are starting or ending a bold range
-                iter.next();
 
                 if let Some(bold) = bold.take() {
                     push_range(count, bold, Style::Bold);
@@ -53,9 +52,8 @@ pub fn markdown_to_body_ranges(input: &str) -> (String, Vec<BodyRange>) {
                     italic = Some(count);
                 }
             }
-            '|' if iter.peek() == Some(&'|') => {
+            '|' if iter.next_if_eq(&'|').is_some() => {
                 // we are starting or ending a spoiler range
-                iter.next();
 
                 if let Some(spoiler) = spoiler.take() {
                     push_range(count, spoiler, Style::Spoiler);
@@ -63,9 +61,8 @@ pub fn markdown_to_body_ranges(input: &str) -> (String, Vec<BodyRange>) {
                     spoiler = Some(count);
                 }
             }
-            '~' if iter.peek() == Some(&'~') => {
+            '~' if iter.next_if_eq(&'~').is_some() => {
                 // we are starting or ending a strikethrough range
-                iter.next();
 
                 if let Some(strikethrough) = strikethrough.take() {
                     push_range(count, strikethrough, Style::Strikethrough);

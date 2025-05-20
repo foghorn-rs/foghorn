@@ -181,9 +181,7 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Event>) {
                                 }
                             }
                             Received::QueueEmpty => synced = true,
-                            Received::Contacts => {
-                                sync_contacts(&mut manager, &cache, &mut c).await;
-                            }
+                            Received::Contacts => sync_contacts(&mut manager, &cache, &mut c).await,
                         }
                     }
                 });
