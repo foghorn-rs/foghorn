@@ -221,7 +221,7 @@ where
 
         let style = (self.style)(theme);
 
-        for (index, span) in self.spans.as_ref().as_ref().iter().enumerate() {
+        for (index, span) in self.spans.iter().enumerate() {
             let link_hovered = self.on_link_click.is_some() && Some(index) == self.hovered_link;
             let mention_hovered =
                 self.on_mention_click.is_some() && Some(index) == self.hovered_mention;
@@ -341,7 +341,7 @@ where
             let state = tree.state.downcast_ref::<State<Link>>();
 
             if let Some(index) = state.paragraph.hit_span(position) {
-                if let Some(span) = self.spans.as_ref().as_ref().get(index) {
+                if let Some(span) = self.spans.get(index) {
                     if span.link.is_some() {
                         self.hovered_link = Some(index);
                     } else if span.mention() {
