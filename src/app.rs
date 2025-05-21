@@ -220,7 +220,7 @@ impl App {
             Message::Tz(tz) => self.tz = Some(tz),
             Message::ContentEdit(action) => self.message_content.perform(action),
             Message::Send => {
-                let content = take(&mut self.message_content).text();
+                let content = take(&mut self.message_content).text().trim().to_string();
 
                 let manager_manager = self.manager_manager.clone();
                 return Task::future(manager_manager.send(
