@@ -221,12 +221,33 @@ where
 
         let style = (self.style)(theme);
 
+        let mut current_spoiler: Option<(usize, Rectangle)> = None;
+        let draw_spoiler = |renderer: &mut Renderer, rectangle, spoiler_hovered| {
+            renderer.fill_quad(
+                Quad {
+                    bounds: rectangle,
+                    border: border::rounded(5),
+                    ..Default::default()
+                },
+                if spoiler_hovered {
+                    style.hovered_spoiler
+                } else {
+                    style.spoiler
+                },
+            );
+        };
+
         for (index, span) in self.spans.iter().enumerate() {
             let link_hovered = self.on_link_click.is_some() && Some(index) == self.hovered_link;
             let mention_hovered =
                 self.on_mention_click.is_some() && Some(index) == self.hovered_mention;
-            let spoiler_hovered = Some(index) == self.hovered_spoiler;
-            let spoiler_revealed = state.revealed_spoilers.contains(&index);
+            let spoiler_hovered = span
+                .spoiler_tag
+                .is_some_and(|tag| Some(tag) == self.hovered_spoiler);
+            let spoiler_revealed = span
+                .spoiler_tag
+                .is_some_and(|tag| state.revealed_spoilers.contains(&tag));
+            let next_is_spoiler = self.spans.get(index + 1).is_some_and(|span| span.spoiler());
 
             if span.strikethrough() || span.spoiler() || span.mention() || link_hovered {
                 let translation = layout.position() - Point::ORIGIN;
@@ -234,18 +255,27 @@ where
 
                 if span.spoiler() && !spoiler_revealed {
                     for bounds in &regions {
-                        renderer.fill_quad(
-                            Quad {
-                                bounds: bounds.shrink([2, 0]) + translation,
-                                border: border::rounded(5),
-                                ..Default::default()
-                            },
-                            if spoiler_hovered {
-                                style.hovered_spoiler
+                        let bounds = bounds.shrink([2, 0]) + translation;
+
+                        if let Some((tag, rectangle)) = current_spoiler.as_mut() {
+                            if Some(*tag) == span.spoiler_tag && rectangle.y == bounds.y {
+                                *rectangle = rectangle.union(&bounds);
                             } else {
-                                style.spoiler
-                            },
-                        );
+                                draw_spoiler(renderer, *rectangle, spoiler_hovered);
+
+                                current_spoiler = span.spoiler_tag.zip(Some(bounds));
+                            }
+                        } else {
+                            current_spoiler = span.spoiler_tag.zip(Some(bounds));
+                        }
+                    }
+
+                    if let Some((_, rectangle)) = current_spoiler.as_ref()
+                        && (index == self.spans.len() - 1 || !next_is_spoiler)
+                    {
+                        draw_spoiler(renderer, *rectangle, spoiler_hovered);
+
+                        current_spoiler = None;
                     }
                 }
 
@@ -346,8 +376,12 @@ where
                         self.hovered_link = Some(index);
                     } else if span.mention() {
                         self.hovered_mention = Some(index);
-                    } else if span.spoiler() && !state.revealed_spoilers.contains(&index) {
-                        self.hovered_spoiler = Some(index);
+                    } else if span.spoiler()
+                        && !span
+                            .spoiler_tag
+                            .is_some_and(|tag| state.revealed_spoilers.contains(&tag))
+                    {
+                        self.hovered_spoiler = span.spoiler_tag;
                     }
                 }
             }
@@ -403,8 +437,8 @@ where
                             shell.publish(on_mention_clicked(mention));
                         }
                     }
-                    Some(span) if Some(span) == self.hovered_spoiler => {
-                        state.revealed_spoilers.push(span);
+                    Some(tag) if Some(tag) == self.hovered_spoiler => {
+                        state.revealed_spoilers.push(tag);
 
                         refresh_spans(
                             state,
@@ -532,10 +566,24 @@ fn refresh_spans<Link>(
 ) where
     Link: Clone,
 {
-    let mut iced_spans: Vec<_> = spans.iter().cloned().map(text::Span::from).collect();
-    for &span in &state.revealed_spoilers {
-        iced_spans[span].color = None;
-    }
+    let iced_spans: Vec<_> = spans
+        .iter()
+        .cloned()
+        .map(|span| {
+            let is_revealed = span
+                .spoiler_tag
+                .as_ref()
+                .is_some_and(|tag| state.revealed_spoilers.contains(tag));
+
+            let mut iced_span = text::Span::from(span);
+
+            if is_revealed {
+                iced_span.color = None;
+            }
+
+            iced_span
+        })
+        .collect();
 
     let text_with_spans = advanced::Text {
         content: iced_spans.as_slice(),
