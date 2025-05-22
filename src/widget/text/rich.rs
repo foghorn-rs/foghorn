@@ -247,7 +247,7 @@ where
             let spoiler_revealed = span
                 .spoiler_tag
                 .is_some_and(|tag| state.revealed_spoilers.contains(&tag));
-            let next_is_spoiler = self.spans.get(index + 1).is_some_and(|span| span.spoiler());
+            let next_is_spoiler = self.spans.get(index + 1).is_some_and(SignalSpan::spoiler);
 
             if span.strikethrough() || span.spoiler() || span.mention() || link_hovered {
                 let translation = layout.position() - Point::ORIGIN;
@@ -270,12 +270,12 @@ where
                         }
                     }
 
-                    if let Some((_, rectangle)) = current_spoiler.as_ref()
-                        && (index == self.spans.len() - 1 || !next_is_spoiler)
-                    {
-                        draw_spoiler(renderer, *rectangle, spoiler_hovered);
+                    if let Some((_, rectangle)) = current_spoiler.as_ref() {
+                        if index == self.spans.len() - 1 || !next_is_spoiler {
+                            draw_spoiler(renderer, *rectangle, spoiler_hovered);
 
-                        current_spoiler = None;
+                            current_spoiler = None;
+                        }
                     }
                 }
 
@@ -359,9 +359,9 @@ where
         shell: &mut Shell<'_, Message>,
         _viewport: &Rectangle,
     ) {
-        let link_was_hovered = self.hovered_link.is_some();
-        let mention_was_hovered = self.hovered_mention.is_some();
-        let spoiler_was_hovered = self.hovered_spoiler.is_some();
+        let link_was_hovered = self.hovered_link;
+        let mention_was_hovered = self.hovered_mention;
+        let spoiler_was_hovered = self.hovered_spoiler;
 
         self.hovered_link = None;
         self.hovered_mention = None;
@@ -374,9 +374,11 @@ where
                 if let Some(span) = self.spans.get(index) {
                     if span.link.is_some() {
                         self.hovered_link = Some(index);
-                    } else if span.mention() {
+                    }
+                    if span.mention() {
                         self.hovered_mention = Some(index);
-                    } else if span.spoiler()
+                    }
+                    if span.spoiler()
                         && !span
                             .spoiler_tag
                             .is_some_and(|tag| state.revealed_spoilers.contains(&tag))
@@ -387,9 +389,9 @@ where
             }
         }
 
-        if link_was_hovered != self.hovered_link.is_some()
-            || spoiler_was_hovered != self.hovered_spoiler.is_some()
-            || mention_was_hovered != self.hovered_mention.is_some()
+        if link_was_hovered != self.hovered_link
+            || spoiler_was_hovered != self.hovered_spoiler
+            || mention_was_hovered != self.hovered_mention
         {
             shell.request_redraw();
         }
