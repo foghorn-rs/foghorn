@@ -1,4 +1,5 @@
 use crate::widget::{SignalSpan, text::span::SPOILER};
+use fxhash::FxHashMap;
 use presage::proto::{
     BodyRange,
     body_range::{AssociatedValue, Style},
@@ -171,6 +172,8 @@ pub fn body_ranges_to_signal_spans(
     let body = body.filter(|body| !body.is_empty())?;
 
     let mut flags = vec![0u8; body.chars().count()];
+    let mut spoiler_tags: FxHashMap<usize, usize> = FxHashMap::default();
+    let mut next_spoiler_tag = 0;
 
     for range in body_ranges {
         let start = range.start() as usize;
@@ -188,6 +191,11 @@ pub fn body_ranges_to_signal_spans(
             continue;
         };
 
+        if style == 3 {
+            spoiler_tags.insert(start, next_spoiler_tag);
+            next_spoiler_tag += 1;
+        }
+
         for flag in &mut flags[start..end] {
             *flag |= 1 << style;
         }
@@ -197,31 +205,25 @@ pub fn body_ranges_to_signal_spans(
     let mut last_flag = flags[0];
     let in_progress_span = &mut String::new();
     let mut spoiler_tag = None;
-    let mut next_spoiler_tag = 0;
 
-    for (flag, c) in flags.iter().zip(body.chars()) {
+    for ((index, flag), c) in flags.iter().enumerate().zip(body.chars()) {
         if last_flag != *flag {
-            if last_flag & SPOILER != 0 {
-                spoiler_tag = Some(next_spoiler_tag);
-
-                if flag & SPOILER == 0 {
-                    next_spoiler_tag += 1;
-                }
-            }
-
             spans.push(
                 SignalSpan::new(take(in_progress_span))
                     .flags(last_flag)
-                    .spoiler_tag_maybe(spoiler_tag.take()),
+                    .spoiler_tag_maybe(spoiler_tag),
             );
+
             last_flag = *flag;
         }
 
-        in_progress_span.push(c);
-    }
+        if let Some(tag) = spoiler_tags.get(&index) {
+            spoiler_tag = Some(*tag);
+        } else if flag & SPOILER == 0 {
+            spoiler_tag = None;
+        }
 
-    if last_flag & SPOILER != 0 {
-        spoiler_tag = Some(next_spoiler_tag);
+        in_progress_span.push(c);
     }
 
     spans.push(
@@ -242,12 +244,12 @@ mod test {
     #[test]
     fn test_happy() {
         let (output, ranges) = markdown_to_body_ranges(
-            r"testing ***rich text*** ~~(fancy \\\*\* escaping)~~ ||this is a `monospace spoiler||` ||*italic* **bold** ~~strikethrough~~ spoiler||",
+            r"testing ***rich text*** ~~(fancy \\\*\* escaping)~~ ||this is a `monospace spoiler||`||*italic* **bold** ~~strikethrough~~ spoiler||",
         );
 
         assert_eq!(
             output,
-            r"testing rich text (fancy \** escaping) this is a monospace spoiler italic bold strikethrough spoiler"
+            r"testing rich text (fancy \** escaping) this is a monospace spoileritalic bold strikethrough spoiler"
         );
 
         assert_eq!(
@@ -279,22 +281,22 @@ mod test {
                     associated_value: Some(AssociatedValue::Style(Style::Monospace as i32))
                 },
                 BodyRange {
-                    start: Some(67),
+                    start: Some(66),
                     length: Some(6),
                     associated_value: Some(AssociatedValue::Style(Style::Italic as i32))
                 },
                 BodyRange {
-                    start: Some(74),
+                    start: Some(73),
                     length: Some(4),
                     associated_value: Some(AssociatedValue::Style(Style::Bold as i32))
                 },
                 BodyRange {
-                    start: Some(79),
+                    start: Some(78),
                     length: Some(13),
                     associated_value: Some(AssociatedValue::Style(Style::Strikethrough as i32))
                 },
                 BodyRange {
-                    start: Some(67),
+                    start: Some(66),
                     length: Some(33),
                     associated_value: Some(AssociatedValue::Style(Style::Spoiler as i32))
                 },
@@ -304,7 +306,7 @@ mod test {
         let output = body_ranges_to_signal_spans(Some(output), ranges).unwrap();
 
         assert_eq!(
-            output,
+            dbg!(output),
             [
                 SignalSpan {
                     text: Cow::Borrowed(r"testing "),
@@ -347,12 +349,6 @@ mod test {
                     flags: SPOILER | MONOSPACE,
                     link: None,
                     spoiler_tag: Some(0)
-                },
-                SignalSpan {
-                    text: Cow::Borrowed(r" "),
-                    flags: 0,
-                    link: None,
-                    spoiler_tag: None
                 },
                 SignalSpan {
                     text: Cow::Borrowed(r"italic"),

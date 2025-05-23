@@ -254,7 +254,7 @@ where
 
                 if span.spoiler() && !spoiler_revealed {
                     for bounds in &regions {
-                        let bounds = bounds.shrink([2, 0]) + translation;
+                        let bounds = bounds.shrink(2) + translation;
 
                         if let Some((tag, rectangle)) = current_spoiler.as_mut() {
                             if Some(*tag) == span.spoiler_tag && rectangle.y == bounds.y {
@@ -269,13 +269,16 @@ where
                         }
                     }
 
-                    if let Some((_, rectangle)) = current_spoiler
-                        .as_ref()
-                        .filter(|_| !self.spans.get(index + 1).is_some_and(SignalSpan::spoiler))
-                    {
-                        draw_spoiler(renderer, *rectangle, spoiler_hovered);
+                    if let Some((_, rectangle)) = current_spoiler.as_ref() {
+                        if self.spans.get(index + 1).is_none_or(|next_span| {
+                            next_span
+                                .spoiler_tag
+                                .is_none_or(|tag| Some(tag) != span.spoiler_tag)
+                        }) {
+                            draw_spoiler(renderer, *rectangle, spoiler_hovered);
 
-                        current_spoiler = None;
+                            current_spoiler = None;
+                        }
                     }
                 }
 
