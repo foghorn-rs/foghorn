@@ -5,12 +5,18 @@ use icons::LUCIDE_BYTES;
 mod app;
 mod dialog;
 mod icons;
+mod log;
 mod manager_manager;
 mod message;
 mod parse;
 mod widget;
 
 fn main() -> Result {
+    #[expect(clippy::print_stderr)]
+    if let Err(error) = log::init() {
+        eprintln!("Foghorn: failed to initialize logger: {error}");
+    }
+
     application(App::create, App::update, App::view)
         .subscription(App::subscription)
         .antialiasing(true)

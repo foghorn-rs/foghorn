@@ -6,5 +6,8 @@ target/
 blobs
 conf
 db
-Lucide.ttf
 snap.*
+
+debug_log.json
+
+Lucide.ttf
