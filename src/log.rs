@@ -4,7 +4,7 @@ mod logger {
     use tracing::Level;
     pub use tracing::{debug, error, info, trace, warn};
     use tracing_subscriber::{
-        filter::{EnvFilter, LevelFilter, Targets},
+        filter::{LevelFilter, Targets},
         fmt,
         prelude::*,
     };
