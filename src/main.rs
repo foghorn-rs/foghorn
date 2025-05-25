@@ -1,4 +1,5 @@
 use app::App;
+use foghorn_widgets as widget;
 use iced::{Result, application};
 use icons::LUCIDE_BYTES;
 
@@ -9,7 +10,6 @@ mod log;
 mod manager_manager;
 mod message;
 mod parse;
-mod widget;
 
 fn main() -> Result {
     #[expect(clippy::print_stderr)]

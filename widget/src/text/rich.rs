@@ -1,17 +1,18 @@
 use super::SignalSpan;
-use iced::{
-    self, Color, Element, Event, Font, Length, Pixels, Point, Rectangle, Renderer, Size, Theme,
-    Vector,
-    advanced::{
-        self, Clipboard, Layout, Renderer as _, Shell, Widget,
-        graphics::text::Paragraph,
-        layout,
-        renderer::{self, Quad},
-        text::{Paragraph as _, Renderer as _},
-        widget::tree::{self, Tree},
+use iced_widget::{
+    Renderer,
+    core::{
+        Clipboard, Color, Element, Event, Font, Layout, Length, Pixels, Point, Rectangle,
+        Renderer as _, Shell, Size, Text, Theme, Vector, Widget, alignment, border, layout, mouse,
+        renderer,
+        renderer::Quad,
+        text::{self, Paragraph as _, Renderer as _, Span},
+        widget::{
+            text::{Alignment, LineHeight, Shaping, Wrapping},
+            tree::{self, Tree},
+        },
     },
-    alignment, border, mouse,
-    widget::text::{self, Alignment, LineHeight, Shaping, Wrapping},
+    graphics::text::Paragraph,
 };
 
 /// A bunch of [`SignalRich`] text.
@@ -481,6 +482,7 @@ where
     }
 }
 
+#[expect(clippy::too_many_arguments)]
 fn layout<Link>(
     state: &mut State<Link>,
     renderer: &Renderer,
@@ -505,7 +507,7 @@ where
         let font = font.unwrap_or_else(|| renderer.default_font());
 
         if state.spans == spans {
-            match state.paragraph.compare(advanced::Text {
+            match state.paragraph.compare(Text {
                 content: (),
                 bounds,
                 size,
@@ -516,11 +518,11 @@ where
                 shaping: Shaping::Advanced,
                 wrapping,
             }) {
-                advanced::text::Difference::None => {}
-                advanced::text::Difference::Bounds => {
+                text::Difference::None => {}
+                text::Difference::Bounds => {
                     state.paragraph.resize(bounds);
                 }
-                advanced::text::Difference::Shape => {
+                text::Difference::Shape => {
                     refresh_spans(
                         state,
                         limits.max(),
@@ -552,6 +554,7 @@ where
     })
 }
 
+#[expect(clippy::too_many_arguments)]
 fn refresh_spans<Link>(
     state: &mut State<Link>,
     bounds: Size,
@@ -574,7 +577,7 @@ fn refresh_spans<Link>(
                 .as_ref()
                 .is_some_and(|tag| state.revealed_spoilers.contains(tag));
 
-            let mut iced_span = text::Span::from(span);
+            let mut iced_span = Span::from(span);
 
             if is_revealed {
                 iced_span.color = None;
@@ -584,7 +587,7 @@ fn refresh_spans<Link>(
         })
         .collect();
 
-    let text_with_spans = advanced::Text {
+    let text_with_spans = Text {
         content: iced_spans.as_slice(),
         bounds,
         size,
@@ -633,7 +636,7 @@ where
     }
 }
 
-/// The appearance of some text.
+/// The appearance of some rich text.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Style {
     /// The [`Color`] of the text.
@@ -650,9 +653,7 @@ pub struct Style {
     pub hovered_mention: Color,
 }
 
-/// A styling function for a [`Text`].
-///
-/// This is just a boxed closure: `Fn(&Theme, Status) -> Style`.
+/// A styling function for a [`SignalRich`].
 pub type StyleFn<'a, Theme> = Box<dyn Fn(&Theme) -> Style + 'a>;
 
 pub fn default(theme: &Theme) -> Style {

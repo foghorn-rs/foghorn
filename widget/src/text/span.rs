@@ -1,8 +1,7 @@
-use iced::{
-    Color, Font,
-    advanced::graphics::core::font,
+use iced_widget::core::{
+    Color, Font, font,
     font::{Family, Weight},
-    widget::text::{self, Fragment, IntoFragment},
+    text::{self, Fragment, IntoFragment},
 };
 use std::borrow::Cow;
 
