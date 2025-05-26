@@ -70,5 +70,6 @@ impl Dialog {
 
         iced_dialog::Dialog::with_buttons(self.is_open, base, content, self.action.into())
             .title(&*self.title)
+            .font(self.font)
     }
 }
