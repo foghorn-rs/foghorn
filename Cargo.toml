@@ -19,7 +19,7 @@ presage = { git = "https://github.com/whisperfish/presage" }
 presage-store-sled = { git = "https://github.com/whisperfish/presage" }
 tokio = "1.45.0"
 fxhash = "0.2.1"
-tracing = "0.1.41"
+tracing.workspace = true
 tracing-subscriber = { version = "0.3.19", features = ["json"] }
 
 [lints]
@@ -36,6 +36,7 @@ rust-version = "1.87.0"
 
 [workspace.dependencies]
 iced_widget= { git = "https://github.com/iced-rs/iced", branch = "master" }
+tracing = "0.1.41"
 
 [patch.crates-io]
 curve25519-dalek = { git = 'https://github.com/signalapp/curve25519-dalek', tag = 'signal-curve25519-4.1.3' }

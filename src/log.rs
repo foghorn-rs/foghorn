@@ -19,7 +19,7 @@ mod logger {
             .with(
                 stdout_log.with_filter(
                     Targets::default()
-                        .with_target("foghorn::widget", Level::DEBUG)
+                        .with_target("foghorn_widgets", Level::DEBUG)
                         .with_default(Level::INFO),
                 ),
             )

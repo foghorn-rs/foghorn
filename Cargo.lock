@@ -1481,6 +1481,7 @@ name = "foghorn_widgets"
 version = "0.0.0"
 dependencies = [
  "iced_widget",
+ "tracing",
 ]
 
 [[package]]

@@ -6,3 +6,6 @@ license.workspace = true
 
 [dependencies]
 iced_widget.workspace = true
+
+tracing.workspace = true
+tracing.features = ["log"]
