@@ -32,6 +32,7 @@ members = ["widget"]
 version = "0.0.0"
 edition = "2024"
 license = "AGPL-3.0-only"
+rust-version = "1.87.0"
 
 [workspace.dependencies]
 iced_widget= { git = "https://github.com/iced-rs/iced", branch = "master" }
