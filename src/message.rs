@@ -683,11 +683,11 @@ async fn get_group_cached(
     let mut members = vec![];
 
     for member in group.members {
-        members.push(
-            get_contact_cached(member.uuid, member.profile_key.bytes, manager, cache)
-                .await?
-                .contact()?,
-        );
+        if let Some(member) =
+            get_contact_cached(member.uuid, member.profile_key.bytes, manager, cache).await
+        {
+            members.push(member.contact()?);
+        }
     }
 
     let group = Group {
