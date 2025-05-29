@@ -11,7 +11,6 @@ use presage::{
     libsignal_service::{
         content::{ContentBody, Metadata},
         prelude::{Content, ProfileKey, Uuid},
-        protocol::ServiceId,
         zkgroup::{GroupMasterKeyBytes, ProfileKeyBytes},
     },
     proto::{
@@ -279,77 +278,6 @@ pub enum SignalAction {
     Delete(Timestamp),
 }
 
-struct PrettyMetadata {
-    sender: ServiceId,
-    destination: ServiceId,
-    timestamp: u64,
-}
-
-impl std::fmt::Debug for PrettyMetadata {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Metadata")
-            .field("sender", &self.sender)
-            .field("destination", &self.destination)
-            .field("timestamp", &self.timestamp)
-            .finish()
-    }
-}
-
-struct PrettyContent<'a> {
-    metadata: PrettyMetadata,
-    body: &'a ContentBody,
-}
-
-impl std::fmt::Debug for PrettyContent<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Content")
-            .field("metadata", &self.metadata)
-            .field(
-                "body",
-                &match self.body {
-                    ContentBody::NullMessage(_) => "NullMessage".to_owned(),
-                    ContentBody::DataMessage(_) => "DataMessage".to_owned(),
-                    ContentBody::SynchronizeMessage(sync) => {
-                        let mut sync_type = "Unknown";
-
-                        if let Some(sent) = &sync.sent {
-                            if sent.message.is_some() {
-                                sync_type = "Data";
-                            } else if sent.story_message.is_some() {
-                                sync_type = "Story";
-                            } else if sent.edit_message.is_some() {
-                                sync_type = "Edit";
-                            }
-                        }
-
-                        format!("SynchronizeMessage({sync_type})")
-                    }
-                    ContentBody::CallMessage(_) => "CallMessage".to_owned(),
-                    ContentBody::ReceiptMessage(_) => "ReceiptMessage".to_owned(),
-                    ContentBody::TypingMessage(_) => "TypingMessage".to_owned(),
-                    ContentBody::StoryMessage(_) => "StoryMessage".to_owned(),
-                    ContentBody::PniSignatureMessage(_) => "PniSignatureMessage".to_owned(),
-                    ContentBody::EditMessage(_) => "EditMessage".to_owned(),
-                },
-            )
-            .finish()
-    }
-}
-
-pub fn pretty_presage_message(message: &Content) -> String {
-    format!(
-        "{:#?}",
-        PrettyContent {
-            metadata: PrettyMetadata {
-                sender: message.metadata.sender,
-                destination: message.metadata.destination,
-                timestamp: message.metadata.timestamp
-            },
-            body: &message.body
-        }
-    )
-}
-
 pub async fn sync_contacts(
     manager: &mut RegisteredManager,
     cache: &RefCell<HashMap<Thread, Chat>>,
@@ -436,12 +364,12 @@ pub async fn sync_messages(
             .flatten()
             .flatten()
         {
-            let message_log = pretty_presage_message(&message);
+            let message_log = format!("{}, {}", message.metadata, message.body);
 
             if let Some(message) = decode_content(message, manager, cache, false).await {
                 c.send(message).await.unwrap();
             } else {
-                log::warn!("Decoding of message failed (store): {}", message_log);
+                log::warn!("Decoding of message failed: {}", message_log);
             }
         }
     }

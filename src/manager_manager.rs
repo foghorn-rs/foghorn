@@ -1,9 +1,6 @@
 use crate::{
     log,
-    message::{
-        Chat, Quote, SignalAction, decode_content, pretty_presage_message, sync_contacts,
-        sync_messages,
-    },
+    message::{Chat, Quote, SignalAction, decode_content, sync_contacts, sync_messages},
     parse::markdown_to_body_ranges,
 };
 use iced::futures::{
@@ -187,18 +184,15 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Event>) {
 
                     while let Some(next) = stream.next().await {
                         match next {
-                            Received::Content(content) => {
-                                let message_log = pretty_presage_message(&content);
+                            Received::Content(message) => {
+                                let message_log = format!("{}, {}", message.metadata, message.body);
 
                                 if let Some(message) =
-                                    decode_content(*content, &mut manager, &cache, synced).await
+                                    decode_content(*message, &mut manager, &cache, synced).await
                                 {
                                     c.send(message).await.unwrap();
                                 } else {
-                                    log::warn!(
-                                        "Decoding of message failed (sync): {}",
-                                        message_log
-                                    );
+                                    log::warn!("Decoding of message failed: {}", message_log);
                                 }
                             }
                             Received::QueueEmpty => synced = true,
