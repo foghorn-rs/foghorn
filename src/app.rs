@@ -133,7 +133,7 @@ impl App {
                 SignalAction::Contact => {
                     self.chats.entry(chat).or_insert_with(|| [].into());
                 }
-                SignalAction::Message(message) => {
+                SignalAction::Message(message, notif) => {
                     self.chats
                         .entry(chat)
                         .and_modify(|m| {
@@ -141,33 +141,27 @@ impl App {
                         })
                         .or_insert_with(|| [(message.timestamp, message.clone())].into());
 
-                    return Task::future(async move {
-                        let body = message
-                            .body
-                            .as_ref()
-                            .map(|spans| {
-                                spans
-                                    .iter()
-                                    .map(|span| span.text.as_ref())
-                                    .collect::<String>()
-                            })
-                            .unwrap_or_default();
+                    if notif {
+                        return Task::future(async move {
+                            let body = message
+                                .body
+                                .as_ref()
+                                .map(|spans| {
+                                    spans
+                                        .iter()
+                                        .map(|span| span.text.as_ref())
+                                        .collect::<String>()
+                                })
+                                .unwrap_or_default();
 
-                        _ = Notification::new()
-                            .summary(&message.sender.name)
-                            .body(&body)
-                            .show_async()
-                            .await;
-                    })
-                    .discard();
-                }
-                SignalAction::MessageNoNotif(message) => {
-                    self.chats
-                        .entry(chat)
-                        .and_modify(|m| {
-                            m.insert(message.timestamp, message.clone());
+                            _ = Notification::new()
+                                .summary(&message.sender.name)
+                                .body(&body)
+                                .show_async()
+                                .await;
                         })
-                        .or_insert_with(|| [(message.timestamp, message)].into());
+                        .discard();
+                    }
                 }
                 SignalAction::Replace(old_ts, message) => {
                     self.chats.get_mut(&chat).unwrap().remove(&old_ts);
@@ -339,12 +333,13 @@ impl App {
             every(Duration::from_secs(1)).map(|_| Message::Now(Timestamp::now())),
             keyboard::on_key_press(|key, modifiers| match key.as_ref() {
                 keyboard::Key::Named(keyboard::key::Named::Tab) if modifiers.command() => {
-                    if modifiers.shift() {
-                        Some(Message::PreviousChat)
+                    Some(if modifiers.shift() {
+                        Message::PreviousChat
                     } else {
-                        Some(Message::NextChat)
-                    }
+                        Message::NextChat
+                    })
                 }
+                keyboard::Key::Named(keyboard::key::Named::Escape) => Some(Message::Quote(None)),
                 _ => None,
             }),
         ])

@@ -274,8 +274,7 @@ impl From<Quote> for data_message::Quote {
 #[derive(Clone, Debug)]
 pub enum SignalAction {
     Contact,
-    Message(Arc<Message>),
-    MessageNoNotif(Arc<Message>),
+    Message(Arc<Message>, bool),
     Replace(Timestamp, Arc<Message>),
     Delete(Timestamp),
 }
@@ -680,14 +679,7 @@ pub async fn decode_content(
             )
             .await;
 
-            Some((
-                chat,
-                if synced {
-                    SignalAction::Message(message.into())
-                } else {
-                    SignalAction::MessageNoNotif(message.into())
-                },
-            ))
+            Some((chat, SignalAction::Message(message.into(), synced)))
         }
         (
             Metadata {
@@ -737,7 +729,7 @@ pub async fn decode_content(
 
             debug_assert!(message.sender.is_self);
 
-            Some((chat, SignalAction::MessageNoNotif(message.into())))
+            Some((chat, SignalAction::Message(message.into(), false)))
         }
         _ => None,
     }

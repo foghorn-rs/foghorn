@@ -1,10 +1,9 @@
 use crate::widget::{SignalSpan, text::span::SPOILER};
-use fxhash::FxHashMap;
 use presage::proto::{
     BodyRange,
     body_range::{AssociatedValue, Style},
 };
-use std::mem::take;
+use std::{collections::HashMap, mem::take};
 
 /// bold: **text**
 /// italic:  *text*
@@ -82,6 +81,7 @@ pub fn markdown_to_body_ranges(input: &str) -> (String, Vec<BodyRange>) {
             }
             '\\' if matches!(iter.peek(), Some(&'*' | &'|' | &'~' | &'¸' | &'\\')) => {
                 // we are escaping a character
+
                 output.push(iter.next().unwrap());
                 count += 1;
             }
@@ -172,7 +172,7 @@ pub fn body_ranges_to_signal_spans(
     let body = body.filter(|body| !body.is_empty())?;
 
     let mut flags = vec![0u8; body.chars().count()];
-    let mut spoiler_tags: FxHashMap<usize, usize> = FxHashMap::default();
+    let mut spoiler_tags = HashMap::new();
     let mut next_spoiler_tag = 0;
 
     for range in body_ranges {
@@ -201,7 +201,7 @@ pub fn body_ranges_to_signal_spans(
         }
     }
 
-    let mut spans: Vec<SignalSpan<'static>> = vec![];
+    let mut spans = vec![];
     let mut last_flag = flags[0];
     let in_progress_span = &mut String::new();
     let mut spoiler_tag = None;
@@ -306,7 +306,7 @@ mod test {
         let output = body_ranges_to_signal_spans(Some(output), ranges).unwrap();
 
         assert_eq!(
-            dbg!(output),
+            output,
             [
                 SignalSpan {
                     text: Cow::Borrowed(r"testing "),

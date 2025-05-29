@@ -17,8 +17,7 @@ mime = "0.3.17"
 notify-rust = "4.11.7"
 presage = { git = "https://github.com/whisperfish/presage" }
 presage-store-sled = { git = "https://github.com/whisperfish/presage" }
-tokio = "1.45.0"
-fxhash = "0.2.1"
+tokio = "1.45.1"
 tracing.workspace = true
 tracing-subscriber = { version = "0.3.19", features = ["json"] }
 
@@ -35,7 +34,7 @@ license = "AGPL-3.0-only"
 rust-version = "1.87.0"
 
 [workspace.dependencies]
-iced_widget= { git = "https://github.com/iced-rs/iced", branch = "master" }
+iced_widget = { git = "https://github.com/iced-rs/iced", branch = "master" }
 tracing = "0.1.41"
 
 [patch.crates-io]
