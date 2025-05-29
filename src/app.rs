@@ -1,5 +1,6 @@
 use crate::{
     dialog::{Action, Dialog},
+    log::warn,
     manager_manager::{ManagerError, ManagerManager},
     message::{self, SignalAction},
 };
@@ -154,11 +155,14 @@ impl App {
                                 })
                                 .unwrap_or_default();
 
-                            _ = Notification::new()
+                            if let Err(err) = Notification::new()
                                 .summary(&message.sender.name)
                                 .body(&body)
                                 .show_async()
-                                .await;
+                                .await
+                            {
+                                warn!("{err}");
+                            }
                         })
                         .discard();
                     }
@@ -206,9 +210,7 @@ impl App {
                     return self.update(Message::OpenChat(chat));
                 }
             }
-            Message::Quote(replying_to) => {
-                self.quote = replying_to.map(|quote| (*quote).clone().into());
-            }
+            Message::Quote(quote) => self.quote = quote.map(|quote| (*quote).clone().into()),
             Message::SplitAt(split_at) => self.split_at = split_at.clamp(153.0, 313.5),
             Message::Now(now) => self.now = Some(now),
             Message::Tz(tz) => self.tz = Some(tz),

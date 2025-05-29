@@ -1,6 +1,5 @@
-#![expect(unused_imports)]
 mod logger {
-    use std::{fs::File, sync::Arc};
+    use std::fs::File;
     use tracing::Level;
     pub use tracing::{debug, error, info, trace, warn};
     use tracing_subscriber::{
@@ -10,27 +9,18 @@ mod logger {
     };
 
     pub fn init() -> std::io::Result<()> {
-        let stdout_log = fmt::layer().compact();
-
-        let file = File::create("debug_log.json")?;
-        let debug_log = fmt::layer().with_writer(Arc::new(file)).json();
-
         tracing_subscriber::registry()
+            .with(fmt::layer().compact())
             .with(
-                stdout_log.with_filter(
-                    Targets::default()
-                        .with_target("foghorn_widgets", Level::DEBUG)
-                        .with_default(Level::INFO),
-                ),
+                fmt::layer()
+                    .with_writer(File::create("debug_log.json")?)
+                    .json(),
             )
-            .with(debug_log)
             .with(
                 Targets::default()
                     .with_target("foghorn", Level::TRACE)
                     .with_target("iced", Level::WARN)
-                    .with_target("iced_wgpu", Level::WARN)
-                    .with_target("iced_tiny_skia", Level::WARN)
-                    .with_target("wgpu_core", LevelFilter::OFF),
+                    .with_target("wgpu", LevelFilter::OFF),
             )
             .init();
 
@@ -38,4 +28,5 @@ mod logger {
     }
 }
 
+#[expect(unused_imports)]
 pub use logger::{debug, error, info, init, trace, warn};
