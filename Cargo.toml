@@ -12,7 +12,7 @@ iced.features = ["image", "qr_code", "tokio", "advanced"]
 
 iced_dialog = { git = "https://github.com/pml68/iced_dialog", branch = "master" }
 iced_split = { git = "https://github.com/edwloef/iced_split", branch = "main" }
-jiff = "0.2.14"
+jiff = "0.2.15"
 mime = "0.3.17"
 notify-rust = "4.11.7"
 presage = { git = "https://github.com/whisperfish/presage" }
