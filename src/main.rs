@@ -6,6 +6,7 @@ use icons::LUCIDE_BYTES;
 mod app;
 mod dialog;
 mod icons;
+mod image;
 mod log;
 mod manager_manager;
 mod message;

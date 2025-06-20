@@ -1,5 +1,6 @@
 use crate::{
-    log, manager_manager::RegisteredManager, parse::body_ranges_to_signal_spans, widget::SignalSpan,
+    image::Image, log, manager_manager::RegisteredManager, parse::body_ranges_to_signal_spans,
+    widget::SignalSpan,
 };
 use iced::{
     futures::{SinkExt as _, StreamExt as _, channel::mpsc, stream::FuturesOrdered},
@@ -690,15 +691,18 @@ async fn get_group_cached(
         }
     }
 
+    let avatar_bytes = manager.retrieve_group_avatar(context).await.ok()?;
+
+    let avatar = match avatar_bytes {
+        Some(bytes) => Image::from_bytes(bytes).await.ok().map(Image::into_handle),
+        None => None,
+    };
+
     let group = Group {
         key,
         revision,
         title: group.title,
-        avatar: manager
-            .retrieve_group_avatar(context)
-            .await
-            .ok()?
-            .map(image::Handle::from_bytes),
+        avatar,
         members,
     };
 
@@ -723,6 +727,16 @@ async fn get_contact_cached(
 
     let profile_key = ProfileKey::create(profile_key.try_into().ok()?);
 
+    let avatar_bytes = manager
+        .retrieve_profile_avatar_by_uuid(uuid, profile_key)
+        .await
+        .ok()?;
+
+    let avatar = match avatar_bytes {
+        Some(bytes) => Image::from_bytes(bytes).await.ok().map(Image::into_handle),
+        None => None,
+    };
+
     let contact = Contact {
         key: profile_key.bytes,
         uuid,
@@ -732,11 +746,7 @@ async fn get_contact_cached(
             .ok()?
             .name?
             .to_string(),
-        avatar: manager
-            .retrieve_profile_avatar_by_uuid(uuid, profile_key)
-            .await
-            .ok()?
-            .map(image::Handle::from_bytes),
+        avatar,
         is_self: uuid == manager.registration_data().service_ids.aci,
     };
 
