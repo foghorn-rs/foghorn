@@ -1,44 +1,34 @@
 use bytes::Bytes;
 use iced::widget::image::Handle;
 use std::{fmt, io};
-use tokio::task;
 
 #[derive(Clone)]
-pub struct Image {
+pub struct Avatar {
     pub width: u32,
     pub height: u32,
     pub rgba: Bytes,
 }
 
-impl Image {
+impl Avatar {
     const WIDTH: u32 = 50;
     const HEIGHT: u32 = 50;
 
-    pub fn from_bytes<'a>(
-        bytes: impl Into<Bytes>,
-    ) -> impl Future<Output = Result<Self, anywho::Error>> + 'a {
-        let bytes = bytes.into();
+    pub fn from_bytes(bytes: impl Into<Bytes>) -> Option<Self> {
+        let mut image = image::ImageReader::new(io::Cursor::new(bytes.into()))
+            .with_guessed_format()
+            .ok()?
+            .decode()
+            .ok()?
+            .thumbnail(Self::WIDTH, Self::HEIGHT)
+            .into_rgba8();
 
-        async move {
-            task::spawn_blocking(move || {
-                let mut image = image::ImageReader::new(io::Cursor::new(bytes))
-                    .with_guessed_format()?
-                    .decode()?
-                    .thumbnail(Self::WIDTH, Self::HEIGHT)
-                    .into_rgba8();
+        circular_crop(&mut image);
 
-                if !is_circular(&image) {
-                    circular_crop(&mut image);
-                }
-
-                Ok(Self {
-                    width: image.width(),
-                    height: image.height(),
-                    rgba: Bytes::from(image.into_raw()),
-                })
-            })
-            .await?
-        }
+        Some(Self {
+            width: image.width(),
+            height: image.height(),
+            rgba: Bytes::from(image.into_raw()),
+        })
     }
 
     pub fn into_handle(self) -> Handle {
@@ -46,7 +36,7 @@ impl Image {
     }
 }
 
-impl fmt::Debug for Image {
+impl fmt::Debug for Avatar {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Image")
             .field("width", &self.width)
@@ -54,42 +44,6 @@ impl fmt::Debug for Image {
             .field("rgba", &self.rgba.len())
             .finish()
     }
-}
-
-fn is_circular(rgba: &image::RgbaImage) -> bool {
-    let (width, height) = rgba.dimensions();
-    if width != height {
-        return false;
-    }
-
-    let radius = width as f32 / 2.0;
-    let center = (radius, radius);
-
-    let check_coords = [
-        (0, 0),
-        (49, 0),
-        (0, 49),
-        (49, 49),
-        (0, 25),
-        (25, 0),
-        (49, 25),
-        (25, 49),
-    ];
-
-    for &(x, y) in &check_coords {
-        let dx = x as f32 + 0.5 - center.0;
-        let dy = y as f32 + 0.5 - center.1;
-        let dist_sq = dx.mul_add(dx, dy * dy);
-
-        if dist_sq > radius * radius {
-            let pixel = rgba.get_pixel(x, y);
-            if pixel.0[3] != 0 {
-                return false;
-            }
-        }
-    }
-
-    true
 }
 
 fn circular_crop(rgba: &mut image::RgbaImage) {

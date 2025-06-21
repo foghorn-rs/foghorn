@@ -4,9 +4,9 @@ use iced::{Result, application};
 use icons::LUCIDE_BYTES;
 
 mod app;
+mod avatar;
 mod dialog;
 mod icons;
-mod image;
 mod log;
 mod manager_manager;
 mod message;

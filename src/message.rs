@@ -1,5 +1,5 @@
 use crate::{
-    image::Image, log, manager_manager::RegisteredManager, parse::body_ranges_to_signal_spans,
+    avatar::Avatar, log, manager_manager::RegisteredManager, parse::body_ranges_to_signal_spans,
     widget::SignalSpan,
 };
 use iced::{
@@ -30,6 +30,7 @@ use std::{
     hash::{Hash, Hasher},
     sync::Arc,
 };
+use tokio::task;
 
 mod view;
 
@@ -694,7 +695,10 @@ async fn get_group_cached(
     let avatar_bytes = manager.retrieve_group_avatar(context).await.ok()?;
 
     let avatar = match avatar_bytes {
-        Some(bytes) => Image::from_bytes(bytes).await.ok().map(Image::into_handle),
+        Some(bytes) => task::spawn_blocking(|| Avatar::from_bytes(bytes))
+            .await
+            .ok()?
+            .map(Avatar::into_handle),
         None => None,
     };
 
@@ -733,7 +737,10 @@ async fn get_contact_cached(
         .ok()?;
 
     let avatar = match avatar_bytes {
-        Some(bytes) => Image::from_bytes(bytes).await.ok().map(Image::into_handle),
+        Some(bytes) => task::spawn_blocking(|| Avatar::from_bytes(bytes))
+            .await
+            .ok()?
+            .map(Avatar::into_handle),
         None => None,
     };
 
