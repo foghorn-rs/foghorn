@@ -3,6 +3,7 @@ name = "foghorn"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+rust-version.workspace = true
 
 [dependencies]
 foghorn_widgets = { path = "widget" }
@@ -17,8 +18,8 @@ image = "0.25.6"
 jiff = "0.2.15"
 mime = "0.3.17"
 notify-rust = "4.11.7"
-presage = { git = "https://github.com/whisperfish/presage" }
-presage-store-sled = { git = "https://github.com/whisperfish/presage" }
+presage = { git = "https://github.com/whisperfish/presage", rev = "58300b9" }
+presage-store-sled = { git = "https://github.com/whisperfish/presage", rev = "58300b9" }
 tokio = "1.45.1"
 tracing.workspace = true
 tracing-subscriber = { version = "0.3.19", features = ["json"] }
