@@ -210,7 +210,7 @@ impl App {
                     return self.update(Message::OpenChat(chat));
                 }
             }
-            Message::Quote(quote) => self.quote = quote.map(|quote| (*quote).clone().into()),
+            Message::Quote(quote) => self.quote = quote.as_deref().cloned().map(Into::into),
             Message::SplitAt(split_at) => self.split_at = split_at.clamp(153.0, 313.5),
             Message::Now(now) => self.now = Some(now),
             Message::Tz(tz) => self.tz = Some(tz),
@@ -324,7 +324,8 @@ impl App {
         let dialog = self
             .dialog
             .as_iced_dialog(container(base).width(Fill).height(Fill))
-            .height(320);
+            .max_height(320)
+            .max_width(iced_dialog::dialog::DEFAULT_MAX_WIDTH);
 
         dialog.into()
     }

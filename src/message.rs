@@ -377,6 +377,8 @@ pub async fn sync_messages(
     }
 }
 
+// TODO: break this down into smaller methods and get rid of the `expect`
+#[expect(clippy::cognitive_complexity)]
 pub async fn decode_content(
     content: Content,
     manager: &mut RegisteredManager,
