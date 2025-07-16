@@ -20,7 +20,7 @@ mime = "0.3.17"
 notify-rust = "4.11.7"
 presage = { git = "https://github.com/whisperfish/presage", rev = "58300b9" }
 presage-store-sled = { git = "https://github.com/whisperfish/presage", rev = "58300b9" }
-tokio = "1.45.1"
+tokio = "1.46.1"
 tracing.workspace = true
 tracing-subscriber = { version = "0.3.19", features = ["json"] }
 
