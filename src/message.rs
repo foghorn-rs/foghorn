@@ -10,7 +10,7 @@ use jiff::Timestamp;
 use mime::Mime;
 use presage::{
     libsignal_service::{
-        content::{ContentBody, Metadata},
+        content::ContentBody,
         prelude::{Content, ProfileKey, Uuid},
         zkgroup::{GroupMasterKeyBytes, ProfileKeyBytes},
     },
@@ -377,47 +377,46 @@ pub async fn sync_messages(
     }
 }
 
-// TODO: break this down into smaller methods and get rid of the `expect`
-#[expect(clippy::cognitive_complexity)]
 pub async fn decode_content(
     content: Content,
     manager: &mut RegisteredManager,
     cache: &RefCell<HashMap<Thread, Chat>>,
     synced: bool,
 ) -> Option<(Chat, SignalAction)> {
-    match (content.metadata, content.body) {
-        (
-            Metadata {
-                sender, timestamp, ..
-            },
-            ContentBody::EditMessage(EditMessage {
-                target_sent_timestamp,
-                data_message:
-                    Some(DataMessage {
-                        body,
-                        attachments,
-                        group_v2,
-                        profile_key,
-                        quote,
-                        sticker,
-                        body_ranges,
-                        ..
-                    }),
-            }),
-        ) => {
+    match content.body {
+        ContentBody::EditMessage(EditMessage {
+            target_sent_timestamp,
+            data_message:
+                Some(DataMessage {
+                    body,
+                    attachments,
+                    group_v2,
+                    profile_key,
+                    quote,
+                    sticker,
+                    body_ranges,
+                    ..
+                }),
+        }) => {
             // a message edited not by us
 
             let chat = if let Some(context) = group_v2 {
                 get_group_cached(context, manager, cache).await?
             } else {
-                get_contact_cached(sender.raw_uuid(), profile_key?, manager, cache).await?
+                get_contact_cached(
+                    content.metadata.sender.raw_uuid(),
+                    profile_key?,
+                    manager,
+                    cache,
+                )
+                .await?
             };
 
             let message = Message::new(
-                timestamp,
+                content.metadata.timestamp,
                 body,
                 attachments,
-                sender.raw_uuid(),
+                content.metadata.sender.raw_uuid(),
                 sticker,
                 quote,
                 cache,
@@ -444,34 +443,29 @@ pub async fn decode_content(
                 ),
             ))
         }
-        (
-            Metadata {
-                sender, timestamp, ..
-            },
-            ContentBody::SynchronizeMessage(SyncMessage {
-                sent:
-                    Some(Sent {
-                        destination_service_id,
-                        edit_message:
-                            Some(EditMessage {
-                                target_sent_timestamp,
-                                data_message:
-                                    Some(DataMessage {
-                                        body,
-                                        attachments,
-                                        group_v2,
-                                        profile_key,
-                                        quote,
-                                        sticker,
-                                        body_ranges,
-                                        ..
-                                    }),
-                            }),
-                        ..
-                    }),
-                ..
-            }),
-        ) => {
+        ContentBody::SynchronizeMessage(SyncMessage {
+            sent:
+                Some(Sent {
+                    destination_service_id,
+                    edit_message:
+                        Some(EditMessage {
+                            target_sent_timestamp,
+                            data_message:
+                                Some(DataMessage {
+                                    body,
+                                    attachments,
+                                    group_v2,
+                                    profile_key,
+                                    quote,
+                                    sticker,
+                                    body_ranges,
+                                    ..
+                                }),
+                        }),
+                    ..
+                }),
+            ..
+        }) => {
             // a message edited by us
 
             let chat = if let Some(context) = group_v2 {
@@ -482,10 +476,10 @@ pub async fn decode_content(
             };
 
             let message = Message::new(
-                timestamp,
+                content.metadata.timestamp,
                 body,
                 attachments,
-                sender.raw_uuid(),
+                content.metadata.sender.raw_uuid(),
                 sticker,
                 quote,
                 cache,
@@ -512,23 +506,26 @@ pub async fn decode_content(
                 ),
             ))
         }
-        (
-            Metadata { sender, .. },
-            ContentBody::DataMessage(DataMessage {
-                group_v2,
-                profile_key,
-                delete: Some(Delete {
-                    target_sent_timestamp,
-                }),
-                ..
+        ContentBody::DataMessage(DataMessage {
+            group_v2,
+            profile_key,
+            delete: Some(Delete {
+                target_sent_timestamp,
             }),
-        ) => {
+            ..
+        }) => {
             // a message deleted not by us
 
             let chat = if let Some(context) = group_v2 {
                 get_group_cached(context, manager, cache).await?
             } else {
-                get_contact_cached(sender.raw_uuid(), profile_key?, manager, cache).await?
+                get_contact_cached(
+                    content.metadata.sender.raw_uuid(),
+                    profile_key?,
+                    manager,
+                    cache,
+                )
+                .await?
             };
 
             Some((
@@ -538,27 +535,24 @@ pub async fn decode_content(
                 ),
             ))
         }
-        (
-            _,
-            ContentBody::SynchronizeMessage(SyncMessage {
-                sent:
-                    Some(Sent {
-                        destination_service_id,
-                        message:
-                            Some(DataMessage {
-                                group_v2,
-                                profile_key,
-                                delete:
-                                    Some(Delete {
-                                        target_sent_timestamp,
-                                    }),
-                                ..
-                            }),
-                        ..
-                    }),
-                ..
-            }),
-        ) => {
+        ContentBody::SynchronizeMessage(SyncMessage {
+            sent:
+                Some(Sent {
+                    destination_service_id,
+                    message:
+                        Some(DataMessage {
+                            group_v2,
+                            profile_key,
+                            delete:
+                                Some(Delete {
+                                    target_sent_timestamp,
+                                }),
+                            ..
+                        }),
+                    ..
+                }),
+            ..
+        }) => {
             // a message deleted by us
 
             let chat = if let Some(context) = group_v2 {
@@ -575,34 +569,35 @@ pub async fn decode_content(
                 ),
             ))
         }
-        (
-            Metadata {
-                sender, timestamp, ..
-            },
-            ContentBody::DataMessage(DataMessage {
-                body,
-                attachments,
-                group_v2,
-                profile_key,
-                quote,
-                sticker,
-                body_ranges,
-                ..
-            }),
-        ) => {
+        ContentBody::DataMessage(DataMessage {
+            body,
+            attachments,
+            group_v2,
+            profile_key,
+            quote,
+            sticker,
+            body_ranges,
+            ..
+        }) => {
             // a message sent not by us, or previously edited by us
 
             let chat = if let Some(context) = group_v2 {
                 get_group_cached(context, manager, cache).await?
             } else {
-                get_contact_cached(sender.raw_uuid(), profile_key?, manager, cache).await?
+                get_contact_cached(
+                    content.metadata.sender.raw_uuid(),
+                    profile_key?,
+                    manager,
+                    cache,
+                )
+                .await?
             };
 
             let message = Message::new(
-                timestamp,
+                content.metadata.timestamp,
                 body,
                 attachments,
-                sender.raw_uuid(),
+                content.metadata.sender.raw_uuid(),
                 sticker,
                 quote,
                 cache,
@@ -613,30 +608,25 @@ pub async fn decode_content(
 
             Some((chat, SignalAction::Message(message.into(), synced)))
         }
-        (
-            Metadata {
-                sender, timestamp, ..
-            },
-            ContentBody::SynchronizeMessage(SyncMessage {
-                sent:
-                    Some(Sent {
-                        destination_service_id,
-                        message:
-                            Some(DataMessage {
-                                body,
-                                attachments,
-                                group_v2,
-                                profile_key,
-                                quote,
-                                sticker,
-                                body_ranges,
-                                ..
-                            }),
-                        ..
-                    }),
-                ..
-            }),
-        ) => {
+        ContentBody::SynchronizeMessage(SyncMessage {
+            sent:
+                Some(Sent {
+                    destination_service_id,
+                    message:
+                        Some(DataMessage {
+                            body,
+                            attachments,
+                            group_v2,
+                            profile_key,
+                            quote,
+                            sticker,
+                            body_ranges,
+                            ..
+                        }),
+                    ..
+                }),
+            ..
+        }) => {
             // a message sent by us
 
             let chat = if let Some(context) = group_v2 {
@@ -647,10 +637,10 @@ pub async fn decode_content(
             };
 
             let message = Message::new(
-                timestamp,
+                content.metadata.timestamp,
                 body,
                 attachments,
-                sender.raw_uuid(),
+                content.metadata.sender.raw_uuid(),
                 sticker,
                 quote,
                 cache,

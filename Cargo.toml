@@ -7,7 +7,12 @@ rust-version.workspace = true
 
 [dependencies]
 foghorn_widgets = { path = "widget" }
-iced = { version = "0.14.0-dev", features = ["image", "qr_code", "tokio", "advanced"] }
+iced = { version = "0.14.0-dev", features = [
+	"image",
+	"qr_code",
+	"tokio",
+	"advanced",
+] }
 iced_dialog = { git = "https://github.com/pml68/iced_dialog", branch = "master" }
 iced_split = { git = "https://github.com/edwloef/iced_split", branch = "main" }
 bytes = "1.10.1"
@@ -65,6 +70,7 @@ missing_errors_doc = "allow"
 missing_panics_doc = "allow"
 
 nursery = { level = "warn", priority = -1 }
+cognitive_complexity = "allow"
 future_not_send = "allow"
 large_futures = "allow"
 large_stack_frames = "allow"
