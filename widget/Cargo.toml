@@ -9,3 +9,5 @@ iced_widget.workspace = true
 
 tracing.workspace = true
 tracing.features = ["log"]
+
+unicode-segmentation.workspace = true

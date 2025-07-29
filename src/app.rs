@@ -270,13 +270,11 @@ impl App {
                 .height(Fill)
                 .anchor_bottom()
                 .spacing(0),
-            ]
-            .push_maybe(
                 self.quote
                     .as_ref()
                     .map(|quote| quote.as_iced_widget(&now, tz)),
-            )
-            .push(horizontal_rule(1))
+                horizontal_rule(1)
+            ]
             .push(
                 text_editor(&self.message_content)
                     .min_height(20)

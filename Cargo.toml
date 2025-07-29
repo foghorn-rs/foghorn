@@ -8,10 +8,10 @@ rust-version.workspace = true
 [dependencies]
 foghorn_widgets = { path = "widget" }
 iced = { version = "0.14.0-dev", features = [
-	"image",
-	"qr_code",
-	"tokio",
-	"advanced",
+  "image",
+  "qr_code",
+  "tokio",
+  "advanced",
 ] }
 iced_dialog = { git = "https://github.com/pml68/iced_dialog", branch = "master" }
 iced_split = { git = "https://github.com/edwloef/iced_split", branch = "main" }
@@ -41,6 +41,7 @@ rust-version = "1.87.0"
 [workspace.dependencies]
 iced_widget = "0.14.0-dev"
 tracing = "0.1.41"
+unicode-segmentation = "1.12.0"
 
 [patch.crates-io]
 curve25519-dalek = { git = 'https://github.com/signalapp/curve25519-dalek', tag = 'signal-curve25519-4.1.3' }

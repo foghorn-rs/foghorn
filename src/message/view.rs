@@ -3,9 +3,7 @@ use crate::{app, icons::reply, widget::SignalRich};
 use iced::{
     Alignment, Element, Fill, Shrink,
     border::{self, radius},
-    widget::{
-        Column, Row, button, column, container, horizontal_space, image, row, text, text::Wrapping,
-    },
+    widget::{button, column, container, horizontal_space, image, row, text, text::Wrapping},
 };
 use jiff::{Span, Unit, Zoned, fmt::friendly::SpanPrinter, tz::TimeZone};
 use std::sync::Arc;
@@ -28,13 +26,14 @@ impl Chat {
             Self::Group(group) => &group.avatar,
         };
 
-        Row::new()
-            .push_maybe(avatar.clone().map(|handle| image(handle).height(50)))
-            .push(horizontal_space())
-            .push(text(name))
-            .align_y(Alignment::Center)
-            .height(Shrink)
-            .into()
+        row![
+            avatar.clone().map(|handle| image(handle).height(50)),
+            horizontal_space(),
+            text(name)
+        ]
+        .align_y(Alignment::Center)
+        .height(Shrink)
+        .into()
     }
 }
 
@@ -50,18 +49,19 @@ impl Quote {
             + &timestamp;
 
         let content = row![
-            column![text(head).size(10)].push_maybe(self.body.as_deref().map(|body| {
-                SignalRich::new()
-                    .with_spans(body)
-                    .wrapping(Wrapping::WordOrGlyph)
-            }))
-        ]
-        .push_maybe(
+            column![
+                text(head).size(10),
+                self.body.as_deref().map(|body| {
+                    SignalRich::new()
+                        .with_spans(body)
+                        .wrapping(Wrapping::WordOrGlyph)
+                })
+            ],
             self.attachments
                 .first()
                 .and_then(|image| image.image.clone())
                 .map(|handle| container(image(handle)).max_height(50)),
-        )
+        ]
         .align_y(Alignment::Center)
         .spacing(5);
 
@@ -90,28 +90,26 @@ impl Message {
 
         let head = self.sender.name.clone() + ", " + &timestamp;
 
-        let content = Column::new()
-            .push_maybe(
-                self.quote
-                    .as_ref()
-                    .map(|quote| quote.as_iced_widget(now, tz)),
-            )
-            .push_maybe(
-                (!self.attachments.is_empty()).then_some(column(
-                    self.attachments
-                        .iter()
-                        .filter_map(|attachment| attachment.image.clone())
-                        .map(|handle| image(handle).width(325).into()),
-                )),
-            )
-            .push(
-                column![text(head).size(10)].push_maybe(self.body.as_deref().map(|body| {
+        let content = column![
+            self.quote
+                .as_ref()
+                .map(|quote| quote.as_iced_widget(now, tz)),
+            (!self.attachments.is_empty()).then_some(column(
+                self.attachments
+                    .iter()
+                    .filter_map(|attachment| attachment.image.clone())
+                    .map(|handle| image(handle).width(325).into()),
+            )),
+            column![
+                text(head).size(10),
+                self.body.as_deref().map(|body| {
                     SignalRich::new()
                         .with_spans(body)
                         .wrapping(Wrapping::WordOrGlyph)
-                })),
-            )
-            .spacing(10);
+                })
+            ]
+        ]
+        .spacing(10);
 
         let content = container(content)
             .max_width(if self.attachments.is_empty() {

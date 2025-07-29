@@ -64,9 +64,11 @@ impl Dialog {
         &'a self,
         base: impl Into<Element<'a, Message>>,
     ) -> iced_dialog::Dialog<'a, Message> {
-        let content = column![text(&*self.content).font(self.font)]
-            .push_maybe(self.qr_code.as_ref().map(qr_code).map(center_x))
-            .spacing(8);
+        let content = column![
+            text(&*self.content).font(self.font),
+            self.qr_code.as_ref().map(qr_code).map(center_x)
+        ]
+        .spacing(8);
 
         iced_dialog::Dialog::with_buttons(self.is_open, base, content, self.action.into())
             .title(&*self.title)
