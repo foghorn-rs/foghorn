@@ -316,53 +316,43 @@ impl Selection {
         }
     }
 
-    /// Moves `self.start` to the beginning of its current line.
+    /// Moves the active [`SelectionEnd`] to the beginning of its current line.
     pub fn select_line_beginning(&mut self) {
-        let mut start = self.start;
+        let mut active_end = self.active_end();
 
-        if start.index > 0 {
-            start.index = 0;
+        if active_end.index > 0 {
+            active_end.index = 0;
 
-            self.select_range(start, self.end);
-            self.direction = Direction::Left;
+            self.change_selection(active_end);
         }
     }
 
-    /// Moves `self.end` to the end of its current line.
+    /// Moves the active [`SelectionEnd`] to the end of its current line.
     pub fn select_line_end(&mut self, paragraph: &Paragraph) {
-        let mut end = self.end;
+        let mut active_end = self.active_end();
 
-        let value = Value::new(paragraph.buffer().lines[end.line].text());
+        let value = Value::new(paragraph.buffer().lines[active_end.line].text());
 
-        if end.index < value.len() {
-            end.index = value.len();
+        if active_end.index < value.len() {
+            active_end.index = value.len();
 
-            self.select_range(self.start, end);
-            self.direction = Direction::Right;
+            self.change_selection(active_end);
         }
     }
 
-    /// Moves `self.start` to the beginning of the document.
+    /// Moves the active [`SelectionEnd`] to the beginning of the [`Paragraph`].
     pub fn select_beginning(&mut self) {
-        if SelectionEnd::default() != self.start {
-            self.direction = Direction::Left;
-        }
-
-        self.select_range(SelectionEnd::default(), self.end);
+        self.change_selection(SelectionEnd::new(0, 0));
     }
 
-    /// Moves `self.end` to the end of the document.
+    /// Moves the active [`SelectionEnd`] to the end of the [`Paragraph`].
     pub fn select_end(&mut self, paragraph: &Paragraph) {
         let lines = &paragraph.buffer().lines;
         let value = Value::new(lines[lines.len() - 1].text());
 
         let new_end = SelectionEnd::new(lines.len() - 1, value.len());
 
-        if new_end != self.end {
-            self.direction = Direction::Right;
-        }
-
-        self.select_range(self.start, new_end);
+        self.change_selection(new_end);
     }
 
     /// Selects an entire line.
@@ -375,13 +365,13 @@ impl Selection {
         self.select_range(start, end);
     }
 
-    /// Selects the entire document.
+    /// Selects the entire [`Paragraph`].
     pub fn select_all(&mut self, paragraph: &Paragraph) {
         let line = paragraph.buffer().lines.len() - 1;
         let index = Value::new(paragraph.buffer().lines[line].text()).len();
 
         let end = SelectionEnd::new(line, index);
 
-        self.select_range(SelectionEnd::default(), end);
+        self.select_range(SelectionEnd::new(0, 0), end);
     }
 }
