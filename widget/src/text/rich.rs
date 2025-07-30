@@ -680,7 +680,9 @@ where
                 {
                     let selection_before = state.selection;
 
-                    if state.keyboard_modifiers.jump() {
+                    if state.keyboard_modifiers.macos_command() {
+                        state.selection.select_line_left();
+                    } else if state.keyboard_modifiers.jump() {
                         state.selection.select_left_by_words(&state.paragraph);
                     } else {
                         state.selection.select_left(&state.paragraph);
@@ -698,7 +700,9 @@ where
                 {
                     let selection_before = state.selection;
 
-                    if state.keyboard_modifiers.jump() {
+                    if state.keyboard_modifiers.macos_command() {
+                        state.selection.select_line_right(&state.paragraph);
+                    } else if state.keyboard_modifiers.jump() {
                         state.selection.select_right_by_words(&state.paragraph);
                     } else {
                         state.selection.select_right(&state.paragraph);

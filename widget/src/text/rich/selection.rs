@@ -176,6 +176,28 @@ impl Selection {
         }
     }
 
+    pub(crate) fn select_line_left(&mut self) {
+        let mut start = self.start;
+
+        if start.index > 0 {
+            start.index = 0;
+
+            self.select_range(start, self.end);
+        }
+    }
+
+    pub(crate) fn select_line_right(&mut self, paragraph: &Paragraph) {
+        let mut end = self.end;
+
+        let value = Value::new(paragraph.buffer().lines[end.line].text());
+
+        if end.index < value.len() {
+            end.index = value.len();
+
+            self.select_range(self.start, end);
+        }
+    }
+
     pub(crate) fn select_all(&mut self, paragraph: &Paragraph) {
         let line = paragraph.buffer().lines.len() - 1;
         let index = Value::new(paragraph.buffer().lines[line].text()).len();
