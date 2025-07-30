@@ -1,6 +1,7 @@
 use iced_widget::{graphics::text::Paragraph, text_input::Value};
 use std::cmp::Ordering;
 
+/// The direction of a selection.
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
 pub enum Direction {
     Left,
@@ -8,17 +9,33 @@ pub enum Direction {
     Right,
 }
 
+/// A text selection.
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
 pub struct Selection {
+    /// The start of the selection.
     pub start: SelectionEnd,
+    /// The end of the selection.
     pub end: SelectionEnd,
+    /// The last direction of the selection.
     pub direction: Direction,
 }
 
+/// One of the ends of a [`Selection`].
+///
+/// Note that the index refers to [`graphemes`], not glyphs or bytes.
+///
+/// [`graphemes`]: unicode_segmentation::UnicodeSegmentation::graphemes
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct SelectionEnd {
     pub line: usize,
     pub index: usize,
+}
+
+impl SelectionEnd {
+    /// Creates a new [`SelectionEnd`].
+    pub fn new(line: usize, index: usize) -> Self {
+        Self { line, index }
+    }
 }
 
 impl PartialOrd for SelectionEnd {
@@ -36,16 +53,92 @@ impl Ord for SelectionEnd {
 }
 
 impl Selection {
+    /// Creates a new empty [`Selection`].
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// A selection is empty when the start and end are the same.
     pub fn is_empty(&self) -> bool {
         self.start == self.end
     }
 
+    /// Returns the currently active [`SelectionEnd`].
+    ///
+    /// `self.end` if `self.direction` is [`Right`], `self.start` otherwise.
+    ///
+    /// [`Right`]: Direction::Right
+    pub fn active_end(&self) -> SelectionEnd {
+        if self.direction == Direction::Right {
+            self.end
+        } else {
+            self.start
+        }
+    }
+
+    /// Select a new range.
+    ///
+    /// `self.start` will be set to the smaller value, `self.end` to the larger.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use foghorn_widgets::text::rich::{Selection, SelectionEnd};
+    ///
+    /// let mut selection = Selection::default();
+    ///
+    /// let start = SelectionEnd::new(5, 17);
+    /// let end = SelectionEnd::new(2, 8);
+    ///
+    /// selection.select_range(start, end);
+    ///
+    /// assert_eq!(selection.start, end);
+    /// assert_eq!(selection.end, start);
+    /// ```
     pub fn select_range(&mut self, start: SelectionEnd, end: SelectionEnd) {
         self.start = start.min(end);
         self.end = end.max(start);
     }
 
-    pub(crate) fn change_selection(&mut self, new_end: SelectionEnd) {
+    /// Updates the current selection by setting a new end point.
+    ///
+    /// This method adjusts the selection range based on the provided `new_end` position. The
+    /// current [`Direction`] is used to determine the new values:
+    ///
+    /// - If the current direction is [`Right`] (i.e., the selection goes from `start` to `end`), the
+    /// range becomes `(start, new_end)`. If `new_end` is before `start`, the direction is flipped to [`Left`].
+    ///
+    /// - If it's [`Left`], the range becomes `(new_end, end)`. If `new_end` is after `end`, the
+    /// direction is flipped to [`Right`].
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use foghorn_widgets::text::rich::selection::{Direction, Selection, SelectionEnd};
+    ///
+    /// let mut selection = Selection::default();
+    ///
+    /// let start = SelectionEnd::new(5, 17);
+    /// let end = SelectionEnd::new(2, 8);
+    ///
+    /// selection.select_range(start, end);
+    ///
+    /// assert_eq!(selection.start, end);
+    /// assert_eq!(selection.end, start);
+    /// assert_eq!(selection.direction, Direction::Right);
+    ///
+    /// let new_end = SelectionEnd::new(2, 2);
+    ///
+    /// selection.change_selection(new_end);
+    ///
+    /// assert_eq!(selection.start, new_end);
+    /// assert_eq!(selection.end, end);
+    /// assert_eq!(selection.direction, Direction::Left);
+    /// ```
+    ///
+    /// [`Left`]: Direction::Left
+    /// [`Right`]: Direction::Right
+    pub fn change_selection(&mut self, new_end: SelectionEnd) {
         let (start, end) = if self.direction == Direction::Right {
             if new_end < self.start {
                 self.direction = Direction::Left;
@@ -63,130 +156,119 @@ impl Selection {
         self.select_range(start, end);
     }
 
-    pub(crate) fn select_word(&mut self, line: usize, index: usize, paragraph: &Paragraph) {
+    /// Selects the word around the given grapheme position.
+    pub fn select_word(&mut self, line: usize, index: usize, paragraph: &Paragraph) {
         let value = Value::new(paragraph.buffer().lines[line].text());
 
-        let start = SelectionEnd {
-            line,
-            index: value.previous_start_of_word(index),
-        };
-
-        let end = SelectionEnd {
-            line,
-            index: value.next_end_of_word(index),
-        };
+        let start = SelectionEnd::new(line, value.previous_start_of_word(index));
+        let end = SelectionEnd::new(line, value.next_end_of_word(index));
 
         self.select_range(start, end);
     }
 
-    pub(crate) fn select_left(&mut self, paragraph: &Paragraph) {
-        let mut new_end = if self.direction == Direction::Right {
-            self.end
-        } else {
-            self.start
-        };
+    /// Moves the active [`SelectionEnd`] to the left by one, wrapping to the previous line if
+    /// possible and required.
+    pub fn select_left(&mut self, paragraph: &Paragraph) {
+        let mut active_end = self.active_end();
 
-        if new_end.index > 0 {
-            new_end.index -= 1;
+        if active_end.index > 0 {
+            active_end.index -= 1;
 
-            self.change_selection(new_end);
-        } else if new_end.line > 0 {
-            new_end.line -= 1;
+            self.change_selection(active_end);
+        } else if active_end.line > 0 {
+            active_end.line -= 1;
 
-            let value = Value::new(paragraph.buffer().lines[new_end.line].text());
-            new_end.index = value.len();
+            let value = Value::new(paragraph.buffer().lines[active_end.line].text());
+            active_end.index = value.len();
 
-            self.change_selection(new_end);
+            self.change_selection(active_end);
         }
     }
 
-    pub(crate) fn select_right(&mut self, paragraph: &Paragraph) {
-        let mut new_end = if self.direction == Direction::Right {
-            self.end
-        } else {
-            self.start
-        };
+    /// Moves the active [`SelectionEnd`] to the right by one, wrapping to the next line if
+    /// possible and required.
+    pub fn select_right(&mut self, paragraph: &Paragraph) {
+        let mut active_end = self.active_end();
 
         let lines = &paragraph.buffer().lines;
-        let value = Value::new(lines[new_end.line].text());
+        let value = Value::new(lines[active_end.line].text());
 
-        if new_end.index < value.len() {
-            new_end.index += 1;
+        if active_end.index < value.len() {
+            active_end.index += 1;
 
-            self.change_selection(new_end);
-        } else if new_end.line < lines.len() - 1 {
-            new_end.line += 1;
-            new_end.index = 0;
+            self.change_selection(active_end);
+        } else if active_end.line < lines.len() - 1 {
+            active_end.line += 1;
+            active_end.index = 0;
 
-            self.change_selection(new_end);
+            self.change_selection(active_end);
         }
     }
 
-    pub(crate) fn select_left_by_words(&mut self, paragraph: &Paragraph) {
-        let mut new_end = if self.direction == Direction::Right {
-            self.end
-        } else {
-            self.start
-        };
+    /// Moves the active [`SelectionEnd`] to the previous start of a word on its current line, or
+    /// the previous line if it exists and `index == 0`.
+    pub fn select_left_by_words(&mut self, paragraph: &Paragraph) {
+        let mut active_end = self.active_end();
 
-        if new_end.index == 1 {
-            new_end.index = 0;
+        if active_end.index == 1 {
+            active_end.index = 0;
 
-            self.change_selection(new_end);
-        } else if new_end.index > 1 {
-            let value = Value::new(paragraph.buffer().lines[new_end.line].text());
-            new_end.index = value.previous_start_of_word(new_end.index);
+            self.change_selection(active_end);
+        } else if active_end.index > 1 {
+            let value = Value::new(paragraph.buffer().lines[active_end.line].text());
+            active_end.index = value.previous_start_of_word(active_end.index);
 
-            self.change_selection(new_end);
-        } else if new_end.line > 0 {
-            new_end.line -= 1;
+            self.change_selection(active_end);
+        } else if active_end.line > 0 {
+            active_end.line -= 1;
 
-            let value = Value::new(paragraph.buffer().lines[new_end.line].text());
-            new_end.index = value.previous_start_of_word(value.len());
+            let value = Value::new(paragraph.buffer().lines[active_end.line].text());
+            active_end.index = value.previous_start_of_word(value.len());
 
-            self.change_selection(new_end);
+            self.change_selection(active_end);
         }
     }
 
-    pub(crate) fn select_right_by_words(&mut self, paragraph: &Paragraph) {
-        let mut new_end = if self.direction == Direction::Right {
-            self.end
-        } else {
-            self.start
-        };
+    /// Moves the active [`SelectionEnd`] to the next end of a word on its current line, or
+    /// the next line if it exists and `index == line.len()`.
+    pub fn select_right_by_words(&mut self, paragraph: &Paragraph) {
+        let mut active_end = self.active_end();
 
         let lines = &paragraph.buffer().lines;
-        let value = Value::new(lines[new_end.line].text());
+        let value = Value::new(lines[active_end.line].text());
 
-        if value.len() - new_end.index == 1 {
-            new_end.index = value.len();
+        if value.len() - active_end.index == 1 {
+            active_end.index = value.len();
 
-            self.change_selection(new_end);
-        } else if new_end.index < value.len() {
-            new_end.index = value.next_end_of_word(new_end.index);
+            self.change_selection(active_end);
+        } else if active_end.index < value.len() {
+            active_end.index = value.next_end_of_word(active_end.index);
 
-            self.change_selection(new_end);
-        } else if new_end.line < lines.len() - 1 {
-            new_end.line += 1;
+            self.change_selection(active_end);
+        } else if active_end.line < lines.len() - 1 {
+            active_end.line += 1;
 
-            let value = Value::new(lines[new_end.line].text());
-            new_end.index = value.next_end_of_word(0);
+            let value = Value::new(lines[active_end.line].text());
+            active_end.index = value.next_end_of_word(0);
 
-            self.change_selection(new_end);
+            self.change_selection(active_end);
         }
     }
 
-    pub(crate) fn select_line_left(&mut self) {
+    /// Moves `self.start` to the beginning of its current line.
+    pub fn select_line_beginning(&mut self) {
         let mut start = self.start;
 
         if start.index > 0 {
             start.index = 0;
 
             self.select_range(start, self.end);
+            self.direction = Direction::Left;
         }
     }
 
-    pub(crate) fn select_line_right(&mut self, paragraph: &Paragraph) {
+    /// Moves `self.end` to the end of its current line.
+    pub fn select_line_end(&mut self, paragraph: &Paragraph) {
         let mut end = self.end;
 
         let value = Value::new(paragraph.buffer().lines[end.line].text());
@@ -195,14 +277,39 @@ impl Selection {
             end.index = value.len();
 
             self.select_range(self.start, end);
+            self.direction = Direction::Right;
         }
     }
 
-    pub(crate) fn select_all(&mut self, paragraph: &Paragraph) {
+    /// Moves `self.start` to the beginning of the document.
+    pub fn select_beginning(&mut self) {
+        if SelectionEnd::default() != self.start {
+            self.direction = Direction::Left;
+        }
+
+        self.select_range(SelectionEnd::default(), self.end);
+    }
+
+    /// Moves `self.end` to the end of the document.
+    pub fn select_end(&mut self, paragraph: &Paragraph) {
+        let lines = &paragraph.buffer().lines;
+        let value = Value::new(lines[lines.len() - 1].text());
+
+        let new_end = SelectionEnd::new(lines.len() - 1, value.len());
+
+        if new_end != self.end {
+            self.direction = Direction::Right;
+        }
+
+        self.select_range(self.start, new_end);
+    }
+
+    /// Selects the entire document.
+    pub fn select_all(&mut self, paragraph: &Paragraph) {
         let line = paragraph.buffer().lines.len() - 1;
         let index = Value::new(paragraph.buffer().lines[line].text()).len();
 
-        let end = SelectionEnd { line, index };
+        let end = SelectionEnd::new(line, index);
 
         self.select_range(SelectionEnd::default(), end);
     }

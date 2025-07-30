@@ -19,7 +19,7 @@ use iced_widget::{
     },
     graphics::text::Paragraph,
 };
-use selection::{Selection, SelectionEnd};
+pub use selection::{Selection, SelectionEnd};
 
 #[cfg(windows)]
 const LINE_ENDING: &str = "\r\n";
@@ -681,7 +681,7 @@ where
                     let selection_before = state.selection;
 
                     if state.keyboard_modifiers.macos_command() {
-                        state.selection.select_line_left();
+                        state.selection.select_line_beginning();
                     } else if state.keyboard_modifiers.jump() {
                         state.selection.select_left_by_words(&state.paragraph);
                     } else {
@@ -701,11 +701,43 @@ where
                     let selection_before = state.selection;
 
                     if state.keyboard_modifiers.macos_command() {
-                        state.selection.select_line_right(&state.paragraph);
+                        state.selection.select_line_end(&state.paragraph);
                     } else if state.keyboard_modifiers.jump() {
                         state.selection.select_right_by_words(&state.paragraph);
                     } else {
                         state.selection.select_right(&state.paragraph);
+                    }
+
+                    if selection_before != state.selection {
+                        shell.request_redraw();
+                    }
+
+                    shell.capture_event();
+                }
+                keyboard::Key::Named(key::Named::ArrowUp)
+                    if state.keyboard_modifiers.shift()
+                        && state.selection != Selection::default() =>
+                {
+                    let selection_before = state.selection;
+
+                    if state.keyboard_modifiers.macos_command() {
+                        state.selection.select_beginning();
+                    }
+
+                    if selection_before != state.selection {
+                        shell.request_redraw();
+                    }
+
+                    shell.capture_event();
+                }
+                keyboard::Key::Named(key::Named::ArrowDown)
+                    if state.keyboard_modifiers.shift()
+                        && state.selection != Selection::default() =>
+                {
+                    let selection_before = state.selection;
+
+                    if state.keyboard_modifiers.macos_command() {
+                        state.selection.select_end(&state.paragraph);
                     }
 
                     if selection_before != state.selection {
