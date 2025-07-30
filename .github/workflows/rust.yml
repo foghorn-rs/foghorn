@@ -5,7 +5,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: hecrj/setup-rust-action@v2
         with:
           components: clippy
       - run: sudo apt-get install protobuf-compiler
@@ -15,7 +15,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: hecrj/setup-rust-action@v2
         with:
           components: rustfmt
       - run: cargo fmt --all -- --check
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hecrj/setup-rust-action@v2
+      - run: sudo apt-get install protobuf-compiler libxkbcommon-dev
+      - run: wget https://unpkg.com/lucide-static@latest/font/Lucide.ttf
+      - run: cargo test --verbose --workspace
