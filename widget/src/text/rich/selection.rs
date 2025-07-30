@@ -365,6 +365,16 @@ impl Selection {
         self.select_range(self.start, new_end);
     }
 
+    /// Selects an entire line.
+    pub fn select_line(&mut self, line: usize, paragraph: &Paragraph) {
+        let value = Value::new(paragraph.buffer().lines[line].text());
+
+        let start = SelectionEnd::new(line, 0);
+        let end = SelectionEnd::new(line, value.len());
+
+        self.select_range(start, end);
+    }
+
     /// Selects the entire document.
     pub fn select_all(&mut self, paragraph: &Paragraph) {
         let line = paragraph.buffer().lines.len() - 1;

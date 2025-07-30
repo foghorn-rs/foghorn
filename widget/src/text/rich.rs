@@ -559,7 +559,10 @@ where
                             state.is_dragging = false;
                         }
                         click::Kind::Triple => {
-                            state.selection.select_all(&state.paragraph);
+                            let (line, _) =
+                                state.find_grapheme_line_and_index(target).unwrap_or((0, 0));
+
+                            state.selection.select_line(line, &state.paragraph);
                             state.is_dragging = false;
                         }
                     }
