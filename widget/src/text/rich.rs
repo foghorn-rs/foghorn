@@ -544,7 +544,7 @@ where
                             let new_end = SelectionEnd { line, index };
 
                             if state.keyboard_modifiers.shift() {
-                                state.selection.select_range(state.selection.start, new_end);
+                                state.selection.change_selection(new_end);
                             } else {
                                 state.selection.select_range(new_end, new_end);
                             }
