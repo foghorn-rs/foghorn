@@ -21,7 +21,7 @@ pub struct SignalSpan<'a, Link = ()> {
     pub flags: u8,
     /// The link of the [`SignalSpan`].
     pub link: Option<Link>,
-    /// Allows spoiler [`Span`]s to be rendered as one.
+    /// Allows spoiler [`SignalSpan`]s to be rendered as one.
     pub spoiler_tag: Option<usize>,
 }
 
