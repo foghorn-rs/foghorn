@@ -677,6 +677,56 @@ where
 
                     shell.capture_event();
                 }
+                keyboard::Key::Character("a")
+                    if state.keyboard_modifiers.command()
+                        && state.selection != Selection::default() =>
+                {
+                    let selection_before = state.selection;
+
+                    state.selection.select_all(&state.paragraph);
+
+                    if selection_before != state.selection {
+                        shell.request_redraw();
+                    }
+
+                    shell.capture_event();
+                }
+                keyboard::Key::Named(key::Named::Home)
+                    if state.keyboard_modifiers.shift()
+                        && state.selection != Selection::default() =>
+                {
+                    let selection_before = state.selection;
+
+                    if state.keyboard_modifiers.jump() {
+                        state.selection.select_beginning();
+                    } else {
+                        state.selection.select_line_beginning();
+                    }
+
+                    if selection_before != state.selection {
+                        shell.request_redraw();
+                    }
+
+                    shell.capture_event();
+                }
+                keyboard::Key::Named(key::Named::End)
+                    if state.keyboard_modifiers.shift()
+                        && state.selection != Selection::default() =>
+                {
+                    let selection_before = state.selection;
+
+                    if state.keyboard_modifiers.jump() {
+                        state.selection.select_end(&state.paragraph);
+                    } else {
+                        state.selection.select_line_end(&state.paragraph);
+                    }
+
+                    if selection_before != state.selection {
+                        shell.request_redraw();
+                    }
+
+                    shell.capture_event();
+                }
                 keyboard::Key::Named(key::Named::ArrowLeft)
                     if state.keyboard_modifiers.shift()
                         && state.selection != Selection::default() =>
@@ -725,6 +775,8 @@ where
 
                     if state.keyboard_modifiers.macos_command() {
                         state.selection.select_beginning();
+                    } else if state.keyboard_modifiers.jump() {
+                        state.selection.select_line_beginning();
                     } else {
                         state.selection.select_up(&state.paragraph);
                     }
@@ -743,6 +795,8 @@ where
 
                     if state.keyboard_modifiers.macos_command() {
                         state.selection.select_end(&state.paragraph);
+                    } else if state.keyboard_modifiers.jump() {
+                        state.selection.select_line_end(&state.paragraph);
                     } else {
                         state.selection.select_down(&state.paragraph);
                     }
