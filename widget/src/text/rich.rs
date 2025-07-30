@@ -1,12 +1,17 @@
+pub mod selection;
 use super::SignalSpan;
 use iced_widget::{
     Renderer,
     core::{
         Clipboard, Color, Element, Event, Font, Layout, Length, Pixels, Point, Rectangle,
-        Renderer as _, Shell, Size, Text, Theme, Vector, Widget, alignment, border, layout, mouse,
+        Renderer as _, Shell, Size, Text, Theme, Vector, Widget, alignment, border, clipboard,
+        keyboard::{self, key},
+        layout,
+        mouse::{self, click},
         renderer,
         renderer::Quad,
         text::{self, Paragraph as _, Renderer as _, Span},
+        touch,
         widget::{
             text::{Alignment, LineHeight, Shaping, Wrapping},
             tree::{self, Tree},
@@ -14,6 +19,12 @@ use iced_widget::{
     },
     graphics::text::Paragraph,
 };
+use selection::{Selection, SelectionEnd};
+
+#[cfg(windows)]
+const LINE_ENDING: &str = "\r\n";
+#[cfg(not(windows))]
+const LINE_ENDING: &str = "\n";
 
 /// A bunch of [`SignalRich`] text.
 #[expect(missing_debug_implementations)]
@@ -156,6 +167,43 @@ struct State<Link> {
     span_pressed: Option<usize>,
     revealed_spoilers: Vec<usize>,
     paragraph: Paragraph,
+    selection: Selection,
+    is_dragging: bool,
+    last_click: Option<mouse::Click>,
+    keyboard_modifiers: keyboard::Modifiers,
+}
+
+impl<Link: Clone> State<Link> {
+    fn find_grapheme_line_and_index(&self, point: Point) -> Option<(usize, usize)> {
+        let cursor = self.paragraph.buffer().hit(point.x, point.y)?;
+
+        let value = self.paragraph.buffer().lines[cursor.line].text();
+
+        Some((
+            cursor.line,
+            unicode_segmentation::UnicodeSegmentation::graphemes(
+                &value[..cursor.index.min(value.len())],
+                true,
+            )
+            .count(),
+        ))
+    }
+
+    fn selection_end_points(&self) -> [Point; 2] {
+        let Selection { start, end, .. } = self.selection;
+
+        let start_position = self
+            .paragraph
+            .grapheme_position(start.line, start.index)
+            .unwrap_or(Point::ORIGIN);
+
+        let end_position = self
+            .paragraph
+            .grapheme_position(end.line, end.index)
+            .unwrap_or(Point::ORIGIN);
+
+        [start_position, end_position]
+    }
 }
 
 impl<Link, Message> Widget<Message, Theme, Renderer> for SignalRich<'_, Link, Message>
@@ -172,6 +220,10 @@ where
             span_pressed: None,
             revealed_spoilers: vec![],
             paragraph: Paragraph::default(),
+            selection: Selection::default(),
+            is_dragging: false,
+            last_click: None,
+            keyboard_modifiers: keyboard::Modifiers::default(),
         })
     }
 
@@ -270,16 +322,16 @@ where
                         }
                     }
 
-                    if let Some((_, rectangle)) = current_spoiler.as_ref() {
-                        if self.spans.get(index + 1).is_none_or(|next_span| {
+                    if let Some((_, rectangle)) = current_spoiler.as_ref()
+                        && self.spans.get(index + 1).is_none_or(|next_span| {
                             next_span
                                 .spoiler_tag
                                 .is_none_or(|tag| Some(tag) != span.spoiler_tag)
-                        }) {
-                            draw_spoiler(renderer, *rectangle, spoiler_hovered);
+                        })
+                    {
+                        draw_spoiler(renderer, *rectangle, spoiler_hovered);
 
-                            current_spoiler = None;
-                        }
+                        current_spoiler = None;
                     }
                 }
 
@@ -342,6 +394,57 @@ where
             }
         }
 
+        if !state.selection.is_empty() {
+            let bounds = layout.bounds();
+
+            let [start, end] = state
+                .selection_end_points()
+                .map(|pos| pos + Vector::new(bounds.x, bounds.y));
+
+            let line_height = self
+                .line_height
+                .to_absolute(self.size.unwrap_or_else(|| renderer.default_size()))
+                .0;
+
+            let baseline_y = bounds.y + ((start.y - bounds.y) / line_height).floor() * line_height;
+
+            //let height = end.y - baseline_y - 0.5;
+            //let rows = (height / line_height).ceil() as usize;
+            let rows = state.selection.end.line - state.selection.start.line + 1;
+
+            for row in 0..rows {
+                let (x, width) = if row == 0 {
+                    (
+                        start.x,
+                        if rows == 1 {
+                            end.x.min(bounds.x + bounds.width) - start.x
+                        } else {
+                            bounds.x + bounds.width - start.x
+                        },
+                    )
+                } else if row == rows - 1 {
+                    (bounds.x, end.x - bounds.x)
+                } else {
+                    (bounds.x, bounds.width)
+                };
+                let y = baseline_y + row as f32 * line_height;
+
+                renderer.fill_quad(
+                    Quad {
+                        bounds: Rectangle {
+                            x,
+                            y,
+                            width,
+                            height: line_height,
+                        },
+                        snap: true,
+                        ..Default::default()
+                    },
+                    style.selection,
+                );
+            }
+        }
+
         draw(
             renderer,
             defaults,
@@ -359,10 +462,22 @@ where
         layout: Layout<'_>,
         cursor: mouse::Cursor,
         renderer: &Renderer,
-        _clipboard: &mut dyn Clipboard,
+        clipboard: &mut dyn Clipboard,
         shell: &mut Shell<'_, Message>,
-        _viewport: &Rectangle,
+        viewport: &Rectangle,
     ) {
+        let state = tree.state.downcast_mut::<State<Link>>();
+
+        let bounds = layout.bounds();
+        let click_position = cursor.position_over(bounds);
+
+        if viewport.intersection(&bounds).is_none()
+            && state.selection == Selection::default()
+            && !state.is_dragging
+        {
+            return;
+        }
+
         let link_was_hovered = self.hovered_link;
         let mention_was_hovered = self.hovered_mention;
         let spoiler_was_hovered = self.hovered_spoiler;
@@ -371,23 +486,20 @@ where
         self.hovered_mention = None;
         self.hovered_spoiler = None;
 
-        if let Some(position) = cursor.position_in(layout.bounds()) {
-            let state = tree.state.downcast_ref::<State<Link>>();
-
-            if let Some(index) = state.paragraph.hit_span(position) {
-                if let Some(span) = self.spans.get(index) {
-                    if span.spoiler()
-                        && span
-                            .spoiler_tag
-                            .is_some_and(|tag| !state.revealed_spoilers.contains(&tag))
-                    {
-                        self.hovered_spoiler = span.spoiler_tag;
-                    } else if span.link.is_some() {
-                        self.hovered_link = Some(index);
-                    } else if span.mention() {
-                        self.hovered_mention = Some(index);
-                    }
-                }
+        if let Some(position) = click_position.map(|p| p - Vector::new(bounds.x, bounds.y))
+            && let Some(index) = state.paragraph.hit_span(position)
+            && let Some(span) = self.spans.get(index)
+        {
+            if span.spoiler()
+                && span
+                    .spoiler_tag
+                    .is_some_and(|tag| !state.revealed_spoilers.contains(&tag))
+            {
+                self.hovered_spoiler = span.spoiler_tag;
+            } else if span.link.is_some() {
+                self.hovered_link = Some(index);
+            } else if span.mention() {
+                self.hovered_mention = Some(index);
             }
         }
 
@@ -399,8 +511,9 @@ where
         }
 
         match event {
-            Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => {
-                let state = tree.state.downcast_mut::<State<Link>>();
+            Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left))
+            | Event::Touch(touch::Event::FingerPressed { .. }) => {
+                let selection_before = state.selection;
 
                 if self.hovered_link.is_some() {
                     state.span_pressed = self.hovered_link;
@@ -412,52 +525,203 @@ where
                     state.span_pressed = self.hovered_spoiler;
                     shell.capture_event();
                 }
-            }
-            Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)) => {
-                let state = tree.state.downcast_mut::<State<Link>>();
 
-                match state.span_pressed {
-                    Some(span) if Some(span) == self.hovered_link => {
-                        if let Some((link, on_link_clicked)) = self
-                            .spans
-                            .get(span)
-                            .and_then(|span| span.link.clone())
-                            .zip(self.on_link_click.as_deref())
-                        {
-                            shell.publish(on_link_clicked(link));
+                if let Some(cursor_position) = click_position {
+                    let target = cursor_position - Vector::new(bounds.x, bounds.y);
+
+                    let click =
+                        mouse::Click::new(cursor_position, mouse::Button::Left, state.last_click);
+
+                    match click.kind() {
+                        click::Kind::Single => {
+                            let (line, index) = if target != Point::ORIGIN {
+                                state.find_grapheme_line_and_index(target)
+                            } else {
+                                None
+                            }
+                            .unwrap_or((0, 0));
+
+                            let new_end = SelectionEnd { line, index };
+
+                            if state.keyboard_modifiers.shift() {
+                                state.selection.select_range(state.selection.start, new_end);
+                            } else {
+                                state.selection.select_range(new_end, new_end);
+                            }
+
+                            state.is_dragging = true;
+                        }
+                        click::Kind::Double => {
+                            let (line, index) =
+                                state.find_grapheme_line_and_index(target).unwrap_or((0, 0));
+
+                            state.selection.select_word(line, index, &state.paragraph);
+                            state.is_dragging = false;
+                        }
+                        click::Kind::Triple => {
+                            state.selection.select_all(&state.paragraph);
+                            state.is_dragging = false;
                         }
                     }
-                    Some(span) if Some(span) == self.hovered_mention => {
-                        if let Some((mention, on_mention_clicked)) = self
-                            .spans
-                            .get(span)
-                            .map(|span| span.text.clone().into_owned())
-                            .zip(self.on_mention_click.as_deref())
-                        {
-                            shell.publish(on_mention_clicked(mention));
-                        }
-                    }
-                    Some(tag) if Some(tag) == self.hovered_spoiler => {
-                        state.revealed_spoilers.push(tag);
 
-                        refresh_spans(
-                            state,
-                            layout.bounds().size(),
-                            self.spans,
-                            self.line_height,
-                            self.size.unwrap_or_else(|| renderer.default_size()),
-                            self.font.unwrap_or_else(|| renderer.default_font()),
-                            self.align_x,
-                            self.align_y,
-                            self.wrapping,
-                        );
+                    state.last_click = Some(click);
 
-                        shell.request_redraw();
-                    }
-                    _ => {}
+                    shell.capture_event();
+                } else {
+                    state.selection = Selection::default();
                 }
 
-                state.span_pressed = None;
+                if selection_before != state.selection {
+                    shell.request_redraw();
+                }
+            }
+            Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left))
+            | Event::Touch(touch::Event::FingerLifted { .. })
+            | Event::Touch(touch::Event::FingerLost { .. }) => {
+                state.is_dragging = false;
+
+                if !matches!(event, Event::Touch(touch::Event::FingerLost { .. })) {
+                    match state.span_pressed {
+                        Some(span) if Some(span) == self.hovered_link => {
+                            if let Some((link, on_link_clicked)) = self
+                                .spans
+                                .get(span)
+                                .and_then(|span| span.link.clone())
+                                .zip(self.on_link_click.as_deref())
+                            {
+                                shell.publish(on_link_clicked(link));
+                            }
+                        }
+                        Some(span) if Some(span) == self.hovered_mention => {
+                            if let Some((mention, on_mention_clicked)) = self
+                                .spans
+                                .get(span)
+                                .map(|span| span.text.clone().into_owned())
+                                .zip(self.on_mention_click.as_deref())
+                            {
+                                shell.publish(on_mention_clicked(mention));
+                            }
+                        }
+                        Some(tag) if Some(tag) == self.hovered_spoiler => {
+                            state.revealed_spoilers.push(tag);
+
+                            refresh_spans(
+                                state,
+                                layout.bounds().size(),
+                                self.spans,
+                                self.line_height,
+                                self.size.unwrap_or_else(|| renderer.default_size()),
+                                self.font.unwrap_or_else(|| renderer.default_font()),
+                                self.align_x,
+                                self.align_y,
+                                self.wrapping,
+                            );
+
+                            shell.request_redraw();
+                        }
+                        _ => {}
+                    }
+
+                    state.span_pressed = None;
+                }
+            }
+            Event::Mouse(mouse::Event::CursorMoved { position })
+            | Event::Touch(touch::Event::FingerMoved { position, .. }) => {
+                if state.is_dragging {
+                    let target = *position - Vector::new(bounds.x, bounds.y);
+
+                    let (line, index) =
+                        state.find_grapheme_line_and_index(target).unwrap_or((0, 0));
+
+                    let new_end = SelectionEnd { line, index };
+
+                    let selection_before = state.selection;
+
+                    state.selection.change_selection(new_end);
+
+                    if selection_before != state.selection {
+                        shell.request_redraw();
+                    }
+                }
+            }
+            Event::Keyboard(keyboard::Event::KeyPressed { key, .. }) => match key.as_ref() {
+                keyboard::Key::Character("c")
+                    if state.keyboard_modifiers.command() && !state.selection.is_empty() =>
+                {
+                    let Selection { start, end, .. } = state.selection;
+
+                    let mut value = String::new();
+                    let buffer_lines = &state.paragraph.buffer().lines;
+                    let lines_total = end.line - start.line + 1;
+
+                    if lines_total == 1 {
+                        value.push_str(&buffer_lines[start.line].text()[start.index..end.index]);
+                    } else {
+                        value.push_str(&buffer_lines[start.line].text()[start.index..]);
+                        value.push_str(LINE_ENDING);
+
+                        if lines_total > 2 {
+                            for line in &buffer_lines[start.line + 1..end.line] {
+                                value.push_str(line.text());
+                                value.push_str(LINE_ENDING);
+                            }
+                        }
+
+                        value.push_str(&buffer_lines[end.line].text()[..end.index]);
+                    }
+
+                    clipboard.write(clipboard::Kind::Standard, value);
+
+                    shell.capture_event();
+                }
+                keyboard::Key::Named(key::Named::ArrowLeft)
+                    if state.keyboard_modifiers.shift()
+                        && state.selection != Selection::default() =>
+                {
+                    let selection_before = state.selection;
+
+                    if state.keyboard_modifiers.jump() {
+                        state.selection.select_left_by_words(&state.paragraph);
+                    } else {
+                        state.selection.select_left(&state.paragraph);
+                    }
+
+                    if selection_before != state.selection {
+                        shell.request_redraw();
+                    }
+
+                    shell.capture_event();
+                }
+                keyboard::Key::Named(key::Named::ArrowRight)
+                    if state.keyboard_modifiers.shift()
+                        && state.selection != Selection::default() =>
+                {
+                    let selection_before = state.selection;
+
+                    if state.keyboard_modifiers.jump() {
+                        state.selection.select_right_by_words(&state.paragraph);
+                    } else {
+                        state.selection.select_right(&state.paragraph);
+                    }
+
+                    if selection_before != state.selection {
+                        shell.request_redraw();
+                    }
+
+                    shell.capture_event();
+                }
+                keyboard::Key::Named(key::Named::Escape) => {
+                    state.is_dragging = false;
+                    state.selection = Selection::default();
+
+                    state.keyboard_modifiers = keyboard::Modifiers::default();
+
+                    shell.capture_event();
+                }
+                _ => {}
+            },
+            Event::Keyboard(keyboard::Event::ModifiersChanged(modifiers)) => {
+                state.keyboard_modifiers = *modifiers;
             }
             _ => {}
         }
@@ -466,8 +730,8 @@ where
     fn mouse_interaction(
         &self,
         _tree: &Tree,
-        _layout: Layout<'_>,
-        _cursor: mouse::Cursor,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
         _viewport: &Rectangle,
         _renderer: &Renderer,
     ) -> mouse::Interaction {
@@ -476,8 +740,10 @@ where
             || self.hovered_spoiler.is_some()
         {
             mouse::Interaction::Pointer
+        } else if cursor.is_over(layout.bounds()) {
+            mouse::Interaction::Text
         } else {
-            mouse::Interaction::None
+            mouse::Interaction::default()
         }
     }
 }
@@ -548,6 +814,8 @@ where
                 align_y,
                 wrapping,
             );
+
+            state.selection = Selection::default();
         }
 
         state.paragraph.min_bounds()
@@ -651,6 +919,8 @@ pub struct Style {
     pub mention: Color,
     /// The [`Color`] of hovered mentions.
     pub hovered_mention: Color,
+    /// The [`Color`] of text selections.
+    pub selection: Color,
 }
 
 /// A styling function for a [`SignalRich`].
@@ -665,5 +935,6 @@ pub fn default(theme: &Theme) -> Style {
         hovered_spoiler: palette.background.weakest.color,
         mention: palette.background.strong.color,
         hovered_mention: palette.background.strongest.color,
+        selection: palette.primary.weak.color,
     }
 }
