@@ -218,9 +218,9 @@ impl Selection {
         } else {
             active_end.line -= 1;
 
-            let mut moving_line_index = self.moving_line_index.take();
+            let mut moving_line_index = None;
 
-            if let Some(index) = moving_line_index {
+            if let Some(index) = self.moving_line_index.take() {
                 active_end.index = index;
             }
 
@@ -249,9 +249,9 @@ impl Selection {
         } else {
             active_end.line += 1;
 
-            let mut moving_line_index = self.moving_line_index.take();
+            let mut moving_line_index = None;
 
-            if let Some(index) = moving_line_index {
+            if let Some(index) = self.moving_line_index.take() {
                 active_end.index = index;
             }
 
