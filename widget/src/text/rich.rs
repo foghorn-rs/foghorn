@@ -722,6 +722,8 @@ where
 
                     if state.keyboard_modifiers.macos_command() {
                         state.selection.select_beginning();
+                    } else {
+                        state.selection.select_up(&state.paragraph);
                     }
 
                     if selection_before != state.selection {
@@ -738,6 +740,8 @@ where
 
                     if state.keyboard_modifiers.macos_command() {
                         state.selection.select_end(&state.paragraph);
+                    } else {
+                        state.selection.select_down(&state.paragraph);
                     }
 
                     if selection_before != state.selection {

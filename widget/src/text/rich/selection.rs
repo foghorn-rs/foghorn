@@ -18,6 +18,7 @@ pub struct Selection {
     pub end: SelectionEnd,
     /// The last direction of the selection.
     pub direction: Direction,
+    moving_line_index: Option<usize>,
 }
 
 /// One of the ends of a [`Selection`].
@@ -106,10 +107,10 @@ impl Selection {
     /// current [`Direction`] is used to determine the new values:
     ///
     /// - If the current direction is [`Right`] (i.e., the selection goes from `start` to `end`), the
-    /// range becomes `(start, new_end)`. If `new_end` is before `start`, the direction is flipped to [`Left`].
+    ///   range becomes `(start, new_end)`. If `new_end` is before `start`, the direction is flipped to [`Left`].
     ///
     /// - If it's [`Left`], the range becomes `(new_end, end)`. If `new_end` is after `end`, the
-    /// direction is flipped to [`Right`].
+    ///   direction is flipped to [`Right`].
     ///
     /// # Example
     ///
@@ -153,6 +154,7 @@ impl Selection {
             (new_end, self.end)
         };
 
+        self.moving_line_index = None;
         self.select_range(start, end);
     }
 
@@ -202,6 +204,65 @@ impl Selection {
             active_end.index = 0;
 
             self.change_selection(active_end);
+        }
+    }
+
+    /// Moves the active [`SelectionEnd`] up by one, keeping track of the original grapheme index.
+    pub fn select_up(&mut self, paragraph: &Paragraph) {
+        let mut active_end = self.active_end();
+
+        if active_end.line == 0 {
+            active_end.index = 0;
+
+            self.change_selection(active_end);
+        } else {
+            active_end.line -= 1;
+
+            let mut moving_line_index = self.moving_line_index.take();
+
+            if let Some(index) = moving_line_index {
+                active_end.index = index;
+            }
+
+            let value = Value::new(paragraph.buffer().lines[active_end.line].text());
+            if active_end.index > value.len() {
+                moving_line_index = Some(active_end.index);
+                active_end.index = value.len();
+            }
+
+            self.change_selection(active_end);
+            self.moving_line_index = moving_line_index;
+        }
+    }
+
+    /// Moves the active [`SelectionEnd`] down by one, keeping track of the original grapheme index.
+    pub fn select_down(&mut self, paragraph: &Paragraph) {
+        let mut active_end = self.active_end();
+
+        let lines = &paragraph.buffer().lines;
+        let value = Value::new(lines[active_end.line].text());
+
+        if active_end.line == lines.len() - 1 {
+            active_end.index = value.len();
+
+            self.change_selection(active_end);
+        } else {
+            active_end.line += 1;
+
+            let mut moving_line_index = self.moving_line_index.take();
+
+            if let Some(index) = moving_line_index {
+                active_end.index = index;
+            }
+
+            let value = Value::new(paragraph.buffer().lines[active_end.line].text());
+            if active_end.index > value.len() {
+                moving_line_index = Some(active_end.index);
+                active_end.index = value.len();
+            }
+
+            self.change_selection(active_end);
+            self.moving_line_index = moving_line_index;
         }
     }
 
