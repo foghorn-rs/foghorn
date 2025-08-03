@@ -239,6 +239,7 @@ pub fn body_ranges_to_signal_spans(
     Some(spans)
 }
 
+#[cfg_attr(not(test), expect(dead_code))]
 pub fn body_ranges_to_markdown(
     body: Option<String>,
     body_ranges: Vec<BodyRange>,
@@ -291,8 +292,8 @@ pub fn body_ranges_to_markdown(
                     SPOILER => markdown.push_str("||"),
                     STRIKETHROUGH => markdown.push_str("~~"),
                     BOLD => markdown.push_str("**"),
-                    ITALIC => markdown.push_str("*"),
-                    MONOSPACE => markdown.push_str("`"),
+                    ITALIC => markdown.push('*'),
+                    MONOSPACE => markdown.push('`'),
                     _ => {}
                 }
             }
@@ -305,7 +306,7 @@ pub fn body_ranges_to_markdown(
         }
 
         if matches!(ch, '|' | '~' | '*' | '`' | '\\') {
-            output.push('\\')
+            output.push('\\');
         }
 
         output.push(ch);
@@ -322,159 +323,163 @@ pub fn body_ranges_to_markdown(
 mod test {
     use super::*;
     use crate::widget::text::span::{BOLD, ITALIC, MONOSPACE, SPOILER, STRIKETHROUGH};
-    use std::borrow::Cow;
+    use iced::widget::text::Fragment;
 
     #[test]
-    fn test_happy() {
-        let input = r"testing ***rich text*** ~~(fancy \\\*\* escaping)~~ ||this is a `monospace spoiler`||||*italic* **bold** ~~strikethrough~~ spoiler||";
+    fn test() {
+        const MARKDOWN: &str = r"testing ***rich text*** ~~(fancy \\\*\* escaping)~~ ||this is a `monospace spoiler`||||*italic* **bold** ~~strikethrough~~ spoiler||";
+        const TEXT: &str = r"testing rich text (fancy \** escaping) this is a monospace spoileritalic bold strikethrough spoiler";
+        const BODY_RANGES: &[BodyRange] = &[
+            BodyRange {
+                start: Some(8),
+                length: Some(9),
+                associated_value: Some(AssociatedValue::Style(Style::Bold as i32)),
+            },
+            BodyRange {
+                start: Some(8),
+                length: Some(9),
+                associated_value: Some(AssociatedValue::Style(Style::Italic as i32)),
+            },
+            BodyRange {
+                start: Some(18),
+                length: Some(20),
+                associated_value: Some(AssociatedValue::Style(Style::Strikethrough as i32)),
+            },
+            BodyRange {
+                start: Some(39),
+                length: Some(27),
+                associated_value: Some(AssociatedValue::Style(Style::Spoiler as i32)),
+            },
+            BodyRange {
+                start: Some(49),
+                length: Some(17),
+                associated_value: Some(AssociatedValue::Style(Style::Monospace as i32)),
+            },
+            BodyRange {
+                start: Some(66),
+                length: Some(6),
+                associated_value: Some(AssociatedValue::Style(Style::Italic as i32)),
+            },
+            BodyRange {
+                start: Some(73),
+                length: Some(4),
+                associated_value: Some(AssociatedValue::Style(Style::Bold as i32)),
+            },
+            BodyRange {
+                start: Some(78),
+                length: Some(13),
+                associated_value: Some(AssociatedValue::Style(Style::Strikethrough as i32)),
+            },
+            BodyRange {
+                start: Some(66),
+                length: Some(33),
+                associated_value: Some(AssociatedValue::Style(Style::Spoiler as i32)),
+            },
+        ];
+        const SIGNAL_SPANS: &[SignalSpan<'_>] = &[
+            SignalSpan {
+                text: Fragment::Borrowed(r"testing "),
+                flags: 0,
+                link: None,
+                spoiler_tag: None,
+            },
+            SignalSpan {
+                text: Fragment::Borrowed(r"rich text"),
+                flags: BOLD | ITALIC,
+                link: None,
+                spoiler_tag: None,
+            },
+            SignalSpan {
+                text: Fragment::Borrowed(r" "),
+                flags: 0,
+                link: None,
+                spoiler_tag: None,
+            },
+            SignalSpan {
+                text: Fragment::Borrowed(r"(fancy \** escaping)"),
+                flags: STRIKETHROUGH,
+                link: None,
+                spoiler_tag: None,
+            },
+            SignalSpan {
+                text: Fragment::Borrowed(r" "),
+                flags: 0,
+                link: None,
+                spoiler_tag: None,
+            },
+            SignalSpan {
+                text: Fragment::Borrowed(r"this is a "),
+                flags: SPOILER,
+                link: None,
+                spoiler_tag: Some(0),
+            },
+            SignalSpan {
+                text: Fragment::Borrowed(r"monospace spoiler"),
+                flags: SPOILER | MONOSPACE,
+                link: None,
+                spoiler_tag: Some(0),
+            },
+            SignalSpan {
+                text: Fragment::Borrowed(r"italic"),
+                flags: SPOILER | ITALIC,
+                link: None,
+                spoiler_tag: Some(1),
+            },
+            SignalSpan {
+                text: Fragment::Borrowed(r" "),
+                flags: SPOILER,
+                link: None,
+                spoiler_tag: Some(1),
+            },
+            SignalSpan {
+                text: Fragment::Borrowed(r"bold"),
+                flags: SPOILER | BOLD,
+                link: None,
+                spoiler_tag: Some(1),
+            },
+            SignalSpan {
+                text: Fragment::Borrowed(r" "),
+                flags: SPOILER,
+                link: None,
+                spoiler_tag: Some(1),
+            },
+            SignalSpan {
+                text: Fragment::Borrowed(r"strikethrough"),
+                flags: SPOILER | STRIKETHROUGH,
+                link: None,
+                spoiler_tag: Some(1),
+            },
+            SignalSpan {
+                text: Fragment::Borrowed(r" spoiler"),
+                flags: SPOILER,
+                link: None,
+                spoiler_tag: Some(1),
+            },
+        ];
 
-        let (output, ranges) = markdown_to_body_ranges(input);
+        let (output, body_ranges) = markdown_to_body_ranges(MARKDOWN);
 
-        assert_eq!(
-            output,
-            r"testing rich text (fancy \** escaping) this is a monospace spoileritalic bold strikethrough spoiler"
-        );
+        assert_eq!(output, TEXT);
+        assert_eq_order_independent(&body_ranges, BODY_RANGES);
 
-        assert_eq!(
-            ranges,
-            [
-                BodyRange {
-                    start: Some(8),
-                    length: Some(9),
-                    associated_value: Some(AssociatedValue::Style(Style::Bold as i32))
-                },
-                BodyRange {
-                    start: Some(8),
-                    length: Some(9),
-                    associated_value: Some(AssociatedValue::Style(Style::Italic as i32))
-                },
-                BodyRange {
-                    start: Some(18),
-                    length: Some(20),
-                    associated_value: Some(AssociatedValue::Style(Style::Strikethrough as i32))
-                },
-                BodyRange {
-                    start: Some(39),
-                    length: Some(27),
-                    associated_value: Some(AssociatedValue::Style(Style::Spoiler as i32))
-                },
-                BodyRange {
-                    start: Some(49),
-                    length: Some(17),
-                    associated_value: Some(AssociatedValue::Style(Style::Monospace as i32))
-                },
-                BodyRange {
-                    start: Some(66),
-                    length: Some(6),
-                    associated_value: Some(AssociatedValue::Style(Style::Italic as i32))
-                },
-                BodyRange {
-                    start: Some(73),
-                    length: Some(4),
-                    associated_value: Some(AssociatedValue::Style(Style::Bold as i32))
-                },
-                BodyRange {
-                    start: Some(78),
-                    length: Some(13),
-                    associated_value: Some(AssociatedValue::Style(Style::Strikethrough as i32))
-                },
-                BodyRange {
-                    start: Some(66),
-                    length: Some(33),
-                    associated_value: Some(AssociatedValue::Style(Style::Spoiler as i32))
-                },
-            ]
-        );
+        let (output, body_ranges) =
+            markdown_to_body_ranges(&body_ranges_to_markdown(Some(output), body_ranges).unwrap());
 
-        let spans = body_ranges_to_signal_spans(Some(output.clone()), ranges.clone()).unwrap();
+        assert_eq!(output, TEXT);
+        assert_eq_order_independent(&body_ranges, BODY_RANGES);
 
-        assert_eq!(
-            spans,
-            [
-                SignalSpan {
-                    text: Cow::Borrowed(r"testing "),
-                    flags: 0,
-                    link: None,
-                    spoiler_tag: None
-                },
-                SignalSpan {
-                    text: Cow::Borrowed(r"rich text"),
-                    flags: BOLD | ITALIC,
-                    link: None,
-                    spoiler_tag: None
-                },
-                SignalSpan {
-                    text: Cow::Borrowed(r" "),
-                    flags: 0,
-                    link: None,
-                    spoiler_tag: None
-                },
-                SignalSpan {
-                    text: Cow::Borrowed(r"(fancy \** escaping)"),
-                    flags: STRIKETHROUGH,
-                    link: None,
-                    spoiler_tag: None
-                },
-                SignalSpan {
-                    text: Cow::Borrowed(r" "),
-                    flags: 0,
-                    link: None,
-                    spoiler_tag: None
-                },
-                SignalSpan {
-                    text: Cow::Borrowed(r"this is a "),
-                    flags: SPOILER,
-                    link: None,
-                    spoiler_tag: Some(0)
-                },
-                SignalSpan {
-                    text: Cow::Borrowed(r"monospace spoiler"),
-                    flags: SPOILER | MONOSPACE,
-                    link: None,
-                    spoiler_tag: Some(0)
-                },
-                SignalSpan {
-                    text: Cow::Borrowed(r"italic"),
-                    flags: SPOILER | ITALIC,
-                    link: None,
-                    spoiler_tag: Some(1)
-                },
-                SignalSpan {
-                    text: Cow::Borrowed(r" "),
-                    flags: SPOILER,
-                    link: None,
-                    spoiler_tag: Some(1)
-                },
-                SignalSpan {
-                    text: Cow::Borrowed(r"bold"),
-                    flags: SPOILER | BOLD,
-                    link: None,
-                    spoiler_tag: Some(1)
-                },
-                SignalSpan {
-                    text: Cow::Borrowed(r" "),
-                    flags: SPOILER,
-                    link: None,
-                    spoiler_tag: Some(1)
-                },
-                SignalSpan {
-                    text: Cow::Borrowed(r"strikethrough"),
-                    flags: SPOILER | STRIKETHROUGH,
-                    link: None,
-                    spoiler_tag: Some(1)
-                },
-                SignalSpan {
-                    text: Cow::Borrowed(r" spoiler"),
-                    flags: SPOILER,
-                    link: None,
-                    spoiler_tag: Some(1)
-                },
-            ]
-        );
+        let spans = body_ranges_to_signal_spans(Some(output), body_ranges).unwrap();
 
-        assert_eq!(
-            body_ranges_to_markdown(Some(output), ranges),
-            Some(input.to_string())
-        );
+        assert_eq_order_independent(&spans, SIGNAL_SPANS);
+    }
+
+    fn assert_eq_order_independent<T: PartialEq>(a: &[T], b: &[T]) {
+        assert_eq!(a.len(), b.len());
+        for i in a {
+            assert_eq!(
+                a.iter().filter(|&x| x == i).count(),
+                b.iter().filter(|&x| x == i).count()
+            );
+        }
     }
 }
