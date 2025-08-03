@@ -2,7 +2,7 @@ use crate::{
     message::Chat,
     widget::{
         SignalSpan,
-        text::span::{MENTION, SPOILER},
+        text::span::{BOLD, ITALIC, MONOSPACE, SPOILER, STRIKETHROUGH},
     },
 };
 use presage::{
@@ -89,7 +89,7 @@ pub fn markdown_to_body_ranges(input: &str) -> (String, Vec<BodyRange>) {
                     monospace = Some(count);
                 }
             }
-            '\\' if matches!(iter.peek(), Some(&'*' | &'|' | &'~' | &'¸' | &'\\')) => {
+            '\\' if matches!(iter.peek(), Some(&'*' | &'|' | &'~' | &'`' | &'\\')) => {
                 // we are escaping a character
 
                 output.push(iter.next().unwrap());
@@ -192,8 +192,7 @@ pub fn body_ranges_to_signal_spans(
         let end = start + range.length() as usize;
 
         let mut mention: Option<Uuid> = None;
-
-        let Some(style) = range
+        let Some(style_flag) = range
             .associated_value
             .as_ref()
             .and_then(|value| match value {
@@ -205,11 +204,12 @@ pub fn body_ranges_to_signal_spans(
                 AssociatedValue::Style(style @ 1..=5) => Some(*style),
                 AssociatedValue::Style(_) => None,
             })
+            .map(|style| 1 << style)
         else {
             continue;
         };
 
-        if style == 3 {
+        if style_flag == SPOILER {
             spoiler_tags.insert(start, next_spoiler_tag);
             next_spoiler_tag += 1;
         }
@@ -225,7 +225,7 @@ pub fn body_ranges_to_signal_spans(
         }
 
         for flag in &mut flags[start..end] {
-            *flag |= 1 << style;
+            *flag |= style_flag;
         }
     }
 
@@ -270,6 +270,85 @@ pub fn body_ranges_to_signal_spans(
     Some(spans)
 }
 
+pub fn body_ranges_to_markdown(
+    body: Option<String>,
+    body_ranges: Vec<BodyRange>,
+) -> Option<String> {
+    let body = body.filter(|body| !body.is_empty())?;
+
+    let mut range_starts = HashMap::new();
+    let mut range_ends = HashMap::new();
+
+    let mut output = String::new();
+
+    for range in body_ranges {
+        let start = range.start() as usize;
+        let end = start + range.length() as usize;
+
+        let Some(style_flag) = range
+            .associated_value
+            .as_ref()
+            .and_then(|value| match value {
+                AssociatedValue::MentionAci(_) => Some(0),
+                AssociatedValue::Style(style @ 1..=5) => Some(*style),
+                AssociatedValue::Style(_) => None,
+            })
+            .map(|style| 1u8 << style)
+        else {
+            continue;
+        };
+
+        range_starts
+            .entry(start)
+            .and_modify(|flag| *flag |= style_flag)
+            .or_insert(style_flag);
+
+        range_ends
+            .entry(end - 1)
+            .and_modify(|flag| *flag |= style_flag)
+            .or_insert(style_flag);
+    }
+
+    let flag_to_markdown = |markdown: &mut String, flag: u8, is_start: bool| {
+        let modifiers = if is_start {
+            [SPOILER, STRIKETHROUGH, BOLD, ITALIC, MONOSPACE]
+        } else {
+            [MONOSPACE, ITALIC, BOLD, STRIKETHROUGH, SPOILER]
+        };
+
+        for modifier in modifiers {
+            if flag & modifier != 0 {
+                match modifier {
+                    SPOILER => markdown.push_str("||"),
+                    STRIKETHROUGH => markdown.push_str("~~"),
+                    BOLD => markdown.push_str("**"),
+                    ITALIC => markdown.push_str("*"),
+                    MONOSPACE => markdown.push_str("`"),
+                    _ => {}
+                }
+            }
+        }
+    };
+
+    for (i, ch) in body.chars().enumerate() {
+        if let Some(flag) = range_starts.get(&i) {
+            flag_to_markdown(&mut output, *flag, true);
+        }
+
+        if matches!(ch, '|' | '~' | '*' | '`' | '\\') {
+            output.push('\\')
+        }
+
+        output.push(ch);
+
+        if let Some(flag) = range_ends.get(&i) {
+            flag_to_markdown(&mut output, *flag, false);
+        }
+    }
+
+    Some(output)
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -278,9 +357,9 @@ mod test {
 
     #[test]
     fn test_happy() {
-        let (output, ranges) = markdown_to_body_ranges(
-            r"testing ***rich text*** ~~(fancy \\\*\* escaping)~~ ||this is a `monospace spoiler||`||*italic* **bold** ~~strikethrough~~ spoiler||",
-        );
+        let input = r"testing ***rich text*** ~~(fancy \\\*\* escaping)~~ ||this is a `monospace spoiler`||||*italic* **bold** ~~strikethrough~~ spoiler||";
+
+        let (output, ranges) = markdown_to_body_ranges(input);
 
         assert_eq!(
             output,
@@ -338,12 +417,15 @@ mod test {
             ]
         );
 
-        let output =
-            body_ranges_to_signal_spans(Some(output), ranges, &RefCell::new(HashMap::new()))
-                .unwrap();
+        let spans = body_ranges_to_signal_spans(
+            Some(output.clone()),
+            ranges.clone(),
+            &RefCell::new(HashMap::new()),
+        )
+        .unwrap();
 
         assert_eq!(
-            output,
+            spans,
             [
                 SignalSpan {
                     text: Cow::Borrowed(r"testing "),
@@ -437,6 +519,11 @@ mod test {
                     spoiler_tag: Some(1)
                 },
             ]
+        );
+
+        assert_eq!(
+            body_ranges_to_markdown(Some(output), ranges),
+            Some(input.to_string())
         );
     }
 }
