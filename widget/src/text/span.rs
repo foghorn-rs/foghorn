@@ -14,7 +14,7 @@ pub const STRIKETHROUGH: u8 = 1 << 4;
 pub const MONOSPACE: u8 = 1 << 5;
 
 /// A span of text.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, Hash)]
 pub struct SignalSpan<'a, Link = ()> {
     /// The [`Fragment`] of text.
     pub text: Fragment<'a>,
