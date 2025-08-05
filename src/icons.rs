@@ -13,3 +13,4 @@ macro_rules! icon {
 
 // https://unpkg.com/lucide-static@latest/font/info.json
 icon!(reply = 57898);
+icon!(edit = 57849);
