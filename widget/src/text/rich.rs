@@ -784,12 +784,18 @@ where
                     shell.capture_event();
                 }
                 keyboard::Key::Named(key::Named::Escape) => {
+                    let should_capture =
+                        state.is_dragging || state.selection != Selection::default();
+
                     state.is_dragging = false;
                     state.selection = Selection::default();
 
                     state.keyboard_modifiers = keyboard::Modifiers::default();
 
-                    shell.capture_event();
+                    if should_capture {
+                        shell.request_redraw();
+                        shell.capture_event();
+                    }
                 }
                 _ => {}
             },
