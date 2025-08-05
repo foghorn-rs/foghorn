@@ -1,5 +1,9 @@
 use super::{Chat, Message, Quote};
-use crate::{app, icons::reply, widget::SignalRich};
+use crate::{
+    app,
+    icons::{edit, reply},
+    widget::SignalRich,
+};
 use iced::{
     Alignment, Element, Fill, Shrink,
     border::{self, radius},
@@ -141,22 +145,27 @@ impl Message {
             })
             .into();
 
+        let mut buttons = [
+            button(edit())
+                .style(button::text)
+                .on_press(app::Message::Edit(Some(self.clone()))),
+            button(reply())
+                .style(button::text)
+                .on_press(app::Message::Quote(Some(self.clone()))),
+        ]
+        .map(Into::into);
+
+        if self.sender.is_self {
+            buttons.reverse();
+        }
+
         let mut items = [
             self.sender
                 .avatar
                 .clone()
                 .map(|handle| image(handle).height(50).into()),
             Some(content),
-            Some(
-                row![
-                    button(reply())
-                        .style(button::text)
-                        .on_press(app::Message::Quote(Some(self.clone()))),
-                ]
-                .height(Fill)
-                .align_y(Alignment::Center)
-                .into(),
-            ),
+            Some(row(buttons).height(Fill).align_y(Alignment::Center).into()),
             Some(space::horizontal().into()),
         ];
 

@@ -1,17 +1,19 @@
 use crate::{
     dialog::{Action, Dialog},
+    icons::edit,
     log::warn,
     manager_manager::{ManagerError, ManagerManager},
     message::{self, SignalAction},
+    parse::body_ranges_to_markdown,
 };
 use iced::{
-    Element,
+    Center, Element,
     Length::Fill,
-    Subscription, Task,
+    Subscription, Task, border,
     futures::channel::oneshot,
     keyboard, padding,
     time::every,
-    widget::{button, column, container, qr_code, rule, scrollable, space, text, text_editor},
+    widget::{button, column, container, qr_code, row, rule, scrollable, space, text, text_editor},
 };
 use iced_split::{Strategy, vertical_split};
 use jiff::{Timestamp, tz::TimeZone};
@@ -40,6 +42,8 @@ pub enum Message {
     PreviousChat,
     Mention(Uuid),
     Quote(Option<Arc<message::Message>>),
+    Edit(Option<Arc<message::Message>>),
+    Escape,
     SplitAt(f32),
     ContentEdit(text_editor::Action),
     Send,
@@ -54,6 +58,7 @@ pub struct App {
     open_chat: Option<message::Chat>,
     message_content: text_editor::Content,
     quote: Option<message::Quote>,
+    editing: Option<Timestamp>,
     split_at: f32,
 }
 
@@ -72,6 +77,7 @@ impl App {
                 open_chat: None,
                 message_content: text_editor::Content::new(),
                 quote: None,
+                editing: None,
                 split_at: 313.5,
             },
             Task::batch([
@@ -216,7 +222,42 @@ impl App {
                     return self.update(Message::OpenChat(chat.clone()));
                 }
             }
-            Message::Quote(quote) => self.quote = quote.as_deref().cloned().map(Into::into),
+            Message::Quote(quote) => {
+                let was_editing = self.editing.is_some();
+
+                self.quote = quote.as_deref().cloned().map(Into::into);
+
+                if was_editing && quote.is_some() {
+                    let _ = self.update(Message::Edit(None));
+                }
+            }
+            Message::Edit(message)
+                if message
+                    .as_deref()
+                    .is_none_or(|message| message.sender.is_self) =>
+            {
+                let was_editing = self.editing.is_some();
+
+                self.editing = message.as_deref().map(|message| message.timestamp);
+                if let Some(message) = message.as_deref() {
+                    let _ = self.update(Message::Quote(None));
+
+                    self.message_content = text_editor::Content::with_text(
+                        &body_ranges_to_markdown(
+                            message.original_body.as_deref(),
+                            &message.body_ranges,
+                        )
+                        .unwrap_or_default(),
+                    );
+                } else if was_editing {
+                    self.message_content = text_editor::Content::new();
+                }
+            }
+            Message::Edit(_) => {}
+            Message::Escape => {
+                let _ = self.update(Message::Quote(None));
+                let _ = self.update(Message::Edit(None));
+            }
             Message::SplitAt(split_at) => self.split_at = split_at.clamp(153.0, 313.5),
             Message::Now(now) => self.now = Some(now),
             Message::Tz(tz) => self.tz = Some(tz),
@@ -225,11 +266,20 @@ impl App {
                 let content = take(&mut self.message_content).text().trim().to_owned();
 
                 let manager_manager = self.manager_manager.clone();
-                return Task::future(manager_manager.send(
-                    self.open_chat.clone().unwrap(),
-                    content,
-                    self.quote.take(),
-                ))
+
+                return if let Some(timestamp) = self.editing {
+                    Task::future(manager_manager.edit(
+                        self.open_chat.clone().unwrap(),
+                        content,
+                        timestamp,
+                    ))
+                } else {
+                    Task::future(manager_manager.send(
+                        self.open_chat.clone().unwrap(),
+                        content,
+                        self.quote.take(),
+                    ))
+                }
                 .and_then(Task::done)
                 .map(Message::Received);
             }
@@ -272,7 +322,7 @@ impl App {
                     column(
                         self.chats[open_chat]
                             .values()
-                            .map(|message| message.as_iced_widget(&now, tz)),
+                            .map(|message| { message.as_iced_widget(&now, tz) }),
                     )
                     .spacing(5),
                 )
@@ -282,6 +332,19 @@ impl App {
                 self.quote
                     .as_ref()
                     .map(|quote| quote.as_iced_widget(&now, tz)),
+                self.editing.as_ref().and(Some(
+                    container(row![edit(), " Edit message"].align_y(Center))
+                        .padding(10)
+                        .style(|t: &iced::Theme| {
+                            let pair = t.extended_palette().primary.weak;
+                            container::Style {
+                                background: Some(pair.color.into()),
+                                text_color: Some(pair.text),
+                                border: border::rounded(5),
+                                ..Default::default()
+                            }
+                        })
+                )),
                 rule::horizontal(1),
                 text_editor(&self.message_content)
                     .min_height(20)
@@ -347,7 +410,7 @@ impl App {
                         Message::NextChat
                     })
                 }
-                keyboard::Key::Named(keyboard::key::Named::Escape) => Some(Message::Quote(None)),
+                keyboard::Key::Named(keyboard::key::Named::Escape) => Some(Message::Escape),
                 _ => None,
             }),
         ])

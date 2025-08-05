@@ -2,7 +2,7 @@ use crate::{
     message::Chat,
     widget::{
         SignalSpan,
-        text::span::{BOLD, ITALIC, MONOSPACE, SPOILER, STRIKETHROUGH, MENTION},
+        text::span::{BOLD, ITALIC, MENTION, MONOSPACE, SPOILER, STRIKETHROUGH},
     },
 };
 use presage::{
@@ -176,8 +176,8 @@ pub fn markdown_to_body_ranges(input: &str) -> (String, Vec<BodyRange>) {
 }
 
 pub fn body_ranges_to_signal_spans(
-    body: Option<String>,
-    body_ranges: Vec<BodyRange>,
+    body: Option<&str>,
+    body_ranges: &[BodyRange],
     cache: &RefCell<HashMap<Thread, Chat>>,
 ) -> Option<Vec<SignalSpan<'static>>> {
     let body = body.filter(|body| !body.is_empty())?;
@@ -270,11 +270,7 @@ pub fn body_ranges_to_signal_spans(
     Some(spans)
 }
 
-#[cfg_attr(not(test), expect(dead_code))]
-pub fn body_ranges_to_markdown(
-    body: Option<String>,
-    body_ranges: Vec<BodyRange>,
-) -> Option<String> {
+pub fn body_ranges_to_markdown(body: Option<&str>, body_ranges: &[BodyRange]) -> Option<String> {
     let body = body.filter(|body| !body.is_empty())?;
 
     let mut range_starts = HashMap::new();
@@ -507,13 +503,19 @@ mod test {
         assert_eq!(output, TEXT);
         assert_eq_order_independent(&body_ranges, BODY_RANGES);
 
-        let (output, body_ranges) =
-            markdown_to_body_ranges(&body_ranges_to_markdown(Some(output), body_ranges).unwrap());
+        let (output, body_ranges) = markdown_to_body_ranges(
+            &body_ranges_to_markdown(Some(output.as_str()), &body_ranges).unwrap(),
+        );
 
         assert_eq!(output, TEXT);
         assert_eq_order_independent(&body_ranges, BODY_RANGES);
 
-        let spans = body_ranges_to_signal_spans(Some(output), body_ranges, &RefCell::new(HashMap::new())).unwrap();
+        let spans = body_ranges_to_signal_spans(
+            Some(output.as_str()),
+            &body_ranges,
+            &RefCell::new(HashMap::new()),
+        )
+        .unwrap();
 
         assert_eq_order_independent(&spans, SIGNAL_SPANS);
     }

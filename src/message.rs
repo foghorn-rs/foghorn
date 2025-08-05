@@ -162,6 +162,8 @@ pub struct Message {
     pub sticker: Option<Attachment>,
     pub sender: Arc<Contact>,
     pub quote: Option<Quote>,
+    pub original_body: Option<String>,
+    pub body_ranges: Vec<BodyRange>,
 }
 
 impl Message {
@@ -190,7 +192,7 @@ impl Message {
 
         Self {
             timestamp: Timestamp::from_millisecond(timestamp as i64).unwrap(),
-            body: body_ranges_to_signal_spans(body, body_ranges, cache),
+            body: body_ranges_to_signal_spans(body.as_deref(), &body_ranges, cache),
             attachments: attachments
                 .into_iter()
                 .map(|ptr| Attachment::new(ptr, manager))
@@ -200,6 +202,8 @@ impl Message {
             sender: cache.borrow()[&Thread::Contact(sender)].contact().unwrap(),
             sticker,
             quote,
+            original_body: body,
+            body_ranges,
         }
     }
 }
@@ -220,7 +224,7 @@ impl Quote {
     ) -> Self {
         Self {
             timestamp: Timestamp::from_millisecond(quote.id.unwrap_or_default() as i64).unwrap(),
-            body: body_ranges_to_signal_spans(quote.text, quote.body_ranges, cache),
+            body: body_ranges_to_signal_spans(quote.text.as_deref(), &quote.body_ranges, cache),
             attachments: quote
                 .attachments
                 .into_iter()
