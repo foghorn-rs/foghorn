@@ -14,7 +14,7 @@ use presage::{
     },
     manager::{Linking, Registered},
     model::{identity::OnNewIdentity, messages::Received},
-    proto::{DataMessage, SyncMessage, sync_message::Sent},
+    proto::{DataMessage, EditMessage, SyncMessage, sync_message::Sent},
     store::{ContentsStore as _, Store},
 };
 use presage_store_sled::{MigrationConflictStrategy, SledStore};
@@ -36,6 +36,12 @@ enum Event {
         Chat,
         String,
         Option<Quote>,
+        oneshot::Sender<(Chat, SignalAction)>,
+    ),
+    EditMessage(
+        Chat,
+        String,
+        Timestamp,
         oneshot::Sender<(Chat, SignalAction)>,
     ),
     Shutdown,
@@ -114,6 +120,22 @@ impl ManagerManager {
 
         self.sender
             .send(Event::SendMessage(chat, content, quote, tx))
+            .await
+            .unwrap();
+
+        rx.await.ok()
+    }
+
+    pub async fn edit(
+        mut self,
+        chat: Chat,
+        content: String,
+        timestamp: Timestamp,
+    ) -> Option<(Chat, SignalAction)> {
+        let (tx, rx) = oneshot::channel();
+
+        self.sender
+            .send(Event::EditMessage(chat, content, timestamp, tx))
             .await
             .unwrap();
 
@@ -258,6 +280,81 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Event>) {
                             sent: Some(Sent {
                                 destination_service_id: chat.uuid().map(|uuid| uuid.to_string()),
                                 message: Some(message),
+                                ..Sent::default()
+                            }),
+                            ..SyncMessage::default()
+                        }
+                        .into(),
+                    };
+
+                    manager
+                        .store()
+                        .save_message(&chat.thread(), message.clone())
+                        .await
+                        .unwrap();
+
+                    c.send(
+                        decode_content(message, &mut manager, &cache, false)
+                            .await
+                            .unwrap(),
+                    )
+                    .unwrap();
+                });
+            }
+            Event::EditMessage(chat, content, timestamp, c) => {
+                let mut manager = manager.borrow().clone().unwrap();
+                let cache = cache.clone();
+
+                task::spawn_local(async move {
+                    let (body, body_ranges) = markdown_to_body_ranges(content.trim());
+                    if body.trim().is_empty() {
+                        return;
+                    }
+
+                    let now = Timestamp::now().as_millisecond() as u64;
+
+                    let metadata = Metadata {
+                        sender: manager.registration_data().service_ids.aci().into(),
+                        destination: manager.registration_data().service_ids.aci().into(),
+                        sender_device: manager.registration_data().device_id.unwrap_or_default(),
+                        timestamp: timestamp.as_millisecond() as u64,
+                        needs_receipt: true,
+                        unidentified_sender: false,
+                        was_plaintext: true,
+                        server_guid: None,
+                    };
+
+                    let message = EditMessage {
+                        target_sent_timestamp: Some(timestamp.as_millisecond() as u64),
+                        data_message: Some(DataMessage {
+                            body: Some(body.clone()),
+                            attachments: Vec::new(),
+                            group_v2: chat.group_context(),
+                            profile_key: chat.profile_key().map(Into::into),
+                            body_ranges: body_ranges.clone(),
+                            ..Default::default()
+                        }),
+                    };
+
+                    match &chat {
+                        Chat::Contact(contact) => manager
+                            .send_message(Aci::from(contact.uuid), message.clone(), now)
+                            .await
+                            .unwrap(),
+                        Chat::Group(group) => {
+                            manager
+                                .send_message_to_group(&group.key, message.clone(), now)
+                                .await
+                                .unwrap();
+                        }
+                    }
+
+                    let message = Content {
+                        metadata,
+                        body: SyncMessage {
+                            sent: Some(Sent {
+                                destination_service_id: chat.uuid().map(|uuid| uuid.to_string()),
+                                edit_message: Some(message),
                                 ..Sent::default()
                             }),
                             ..SyncMessage::default()
