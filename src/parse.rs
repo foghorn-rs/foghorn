@@ -2,7 +2,7 @@ use crate::{
     message::Chat,
     widget::{
         SignalSpan,
-        text::span::{BOLD, ITALIC, MONOSPACE, SPOILER, STRIKETHROUGH, MENTION},
+        text::span::{BOLD, ITALIC, MENTION, MONOSPACE, SPOILER, STRIKETHROUGH},
     },
 };
 use presage::{
@@ -510,7 +510,12 @@ mod test {
         assert_eq!(output, TEXT);
         assert_eq_order_independent(&body_ranges, BODY_RANGES);
 
-        let spans = body_ranges_to_signal_spans(Some(output.as_str()), &body_ranges, &RefCell::new(HashMap::new())).unwrap();
+        let spans = body_ranges_to_signal_spans(
+            Some(output.as_str()),
+            &body_ranges,
+            &RefCell::new(HashMap::new()),
+        )
+        .unwrap();
 
         assert_eq_order_independent(&spans, SIGNAL_SPANS);
     }

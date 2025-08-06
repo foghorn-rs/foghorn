@@ -228,19 +228,15 @@ impl App {
                 self.quote = quote.as_deref().cloned().map(Into::into);
 
                 if was_editing && quote.is_some() {
-                    let _ = self.update(Message::Edit(None));
+                    _ = self.update(Message::Edit(None));
                 }
             }
-            Message::Edit(message)
-                if message
-                    .as_deref()
-                    .is_none_or(|message| message.sender.is_self) =>
-            {
+            Message::Edit(message) => {
                 let was_editing = self.editing.is_some();
 
                 self.editing = message.as_deref().map(|message| message.timestamp);
                 if let Some(message) = message.as_deref() {
-                    let _ = self.update(Message::Quote(None));
+                    _ = self.update(Message::Quote(None));
 
                     self.message_content = text_editor::Content::with_text(
                         &body_ranges_to_markdown(
@@ -253,10 +249,9 @@ impl App {
                     self.message_content = text_editor::Content::new();
                 }
             }
-            Message::Edit(_) => {}
             Message::Escape => {
-                let _ = self.update(Message::Quote(None));
-                let _ = self.update(Message::Edit(None));
+                _ = self.update(Message::Quote(None));
+                _ = self.update(Message::Edit(None));
             }
             Message::SplitAt(split_at) => self.split_at = split_at.clamp(153.0, 313.5),
             Message::Now(now) => self.now = Some(now),
@@ -267,7 +262,7 @@ impl App {
 
                 let manager_manager = self.manager_manager.clone();
 
-                return if let Some(timestamp) = self.editing {
+                return if let Some(timestamp) = self.editing.take() {
                     Task::future(manager_manager.edit(
                         self.open_chat.clone().unwrap(),
                         content,
