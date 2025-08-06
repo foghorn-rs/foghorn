@@ -79,18 +79,18 @@ impl Selection {
         let buffer_lines = &paragraph.buffer().lines;
         let lines_total = end.line - start.line + 1;
 
-        for line in 0..lines_total {
-            if line == 0 {
+        for (idx, line) in buffer_lines.iter().enumerate().take(lines_total) {
+            if idx == 0 {
                 if lines_total == 1 {
-                    value.push_str(&buffer_lines[line].text()[start.index..end.index]);
+                    value.push_str(&line.text()[start.index..end.index]);
                 } else {
-                    value.push_str(&buffer_lines[line].text()[start.index..]);
+                    value.push_str(&line.text()[start.index..]);
                     value.push_str(LINE_ENDING);
                 }
-            } else if line == lines_total - 1 {
-                value.push_str(&buffer_lines[line].text()[..end.index]);
+            } else if idx == lines_total - 1 {
+                value.push_str(&line.text()[..end.index]);
             } else {
-                value.push_str(&buffer_lines[line].text());
+                value.push_str(line.text());
                 value.push_str(LINE_ENDING);
             }
         }
