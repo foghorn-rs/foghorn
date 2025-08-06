@@ -146,14 +146,17 @@ impl Message {
             .into();
 
         let mut buttons = [
-            button(edit())
-                .style(button::text)
-                .on_press(app::Message::Edit(Some(self.clone()))),
-            button(reply())
-                .style(button::text)
-                .on_press(app::Message::Quote(Some(self.clone()))),
-        ]
-        .map(Into::into);
+            self.sender.is_self.then(|| {
+                button(edit())
+                    .style(button::text)
+                    .on_press(app::Message::Edit(Some(self.clone())))
+            }),
+            Some(
+                button(reply())
+                    .style(button::text)
+                    .on_press(app::Message::Quote(Some(self.clone()))),
+            ),
+        ];
 
         if self.sender.is_self {
             buttons.reverse();
@@ -165,7 +168,12 @@ impl Message {
                 .clone()
                 .map(|handle| image(handle).height(50).into()),
             Some(content),
-            Some(row(buttons).height(Fill).align_y(Alignment::Center).into()),
+            Some(
+                row(buttons.into_iter().flatten().map(Element::from))
+                    .height(Fill)
+                    .align_y(Alignment::Center)
+                    .into(),
+            ),
             Some(space::horizontal().into()),
         ];
 
