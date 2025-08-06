@@ -1,6 +1,11 @@
 use iced_widget::{graphics::text::Paragraph, text_input::Value};
 use std::cmp::Ordering;
 
+#[cfg(windows)]
+const LINE_ENDING: &str = "\r\n";
+#[cfg(not(windows))]
+const LINE_ENDING: &str = "\n";
+
 /// The direction of a selection.
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
 pub enum Direction {
@@ -62,6 +67,35 @@ impl Selection {
     /// A selection is empty when the start and end are the same.
     pub fn is_empty(&self) -> bool {
         self.start == self.end
+    }
+
+    /// Returns the selected text from the given [`Paragraph`].
+    ///
+    /// Uses `\r\n` on Windows and `\n` on other systems as newline.
+    pub fn text(&self, paragraph: &Paragraph) -> String {
+        let Selection { start, end, .. } = *self;
+
+        let mut value = String::new();
+        let buffer_lines = &paragraph.buffer().lines;
+        let lines_total = end.line - start.line + 1;
+
+        for line in 0..lines_total {
+            if line == 0 {
+                if lines_total == 1 {
+                    value.push_str(&buffer_lines[line].text()[start.index..end.index]);
+                } else {
+                    value.push_str(&buffer_lines[line].text()[start.index..]);
+                    value.push_str(LINE_ENDING);
+                }
+            } else if line == lines_total - 1 {
+                value.push_str(&buffer_lines[line].text()[..end.index]);
+            } else {
+                value.push_str(&buffer_lines[line].text());
+                value.push_str(LINE_ENDING);
+            }
+        }
+
+        value
     }
 
     /// Returns the currently active [`SelectionEnd`].

@@ -21,11 +21,6 @@ use iced_widget::{
 };
 pub use selection::{Selection, SelectionEnd};
 
-#[cfg(windows)]
-const LINE_ENDING: &str = "\r\n";
-#[cfg(not(windows))]
-const LINE_ENDING: &str = "\n";
-
 /// A bunch of [`SignalRich`] text.
 #[expect(missing_debug_implementations)]
 pub struct SignalRich<'a, Link, Message> {
@@ -651,29 +646,10 @@ where
                 keyboard::Key::Character("c")
                     if state.keyboard_modifiers.command() && !state.selection.is_empty() =>
                 {
-                    let Selection { start, end, .. } = state.selection;
-
-                    let mut value = String::new();
-                    let buffer_lines = &state.paragraph.buffer().lines;
-                    let lines_total = end.line - start.line + 1;
-
-                    if lines_total == 1 {
-                        value.push_str(&buffer_lines[start.line].text()[start.index..end.index]);
-                    } else {
-                        value.push_str(&buffer_lines[start.line].text()[start.index..]);
-                        value.push_str(LINE_ENDING);
-
-                        if lines_total > 2 {
-                            for line in &buffer_lines[start.line + 1..end.line] {
-                                value.push_str(line.text());
-                                value.push_str(LINE_ENDING);
-                            }
-                        }
-
-                        value.push_str(&buffer_lines[end.line].text()[..end.index]);
-                    }
-
-                    clipboard.write(clipboard::Kind::Standard, value);
+                    clipboard.write(
+                        clipboard::Kind::Standard,
+                        state.selection.text(&state.paragraph),
+                    );
 
                     shell.capture_event();
                 }
