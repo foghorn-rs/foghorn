@@ -1,7 +1,7 @@
 use crate::app::Message;
 use iced::{
-    Element, Font,
-    widget::{center_x, column, qr_code, text},
+    Color, Element, Font,
+    widget::{center_x, column, container, qr_code, text},
 };
 use iced_dialog::button;
 use std::borrow::Cow;
@@ -66,7 +66,14 @@ impl Dialog {
     ) -> iced_dialog::Dialog<'a, Message> {
         let content = column![
             text(&*self.content).font(self.font),
-            self.qr_code.as_ref().map(qr_code).map(center_x)
+            self.qr_code.as_ref().map(|code| center_x(
+                container(qr_code(code).style(|_| qr_code::Style {
+                    cell: Color::BLACK,
+                    background: Color::WHITE,
+                }))
+                .padding(4)
+                .style(|_| container::background(Color::WHITE))
+            ))
         ]
         .spacing(8);
 
