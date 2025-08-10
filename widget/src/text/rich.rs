@@ -403,8 +403,12 @@ where
 
             let baseline_y = bounds.y + ((start.y - bounds.y) / line_height).floor() * line_height;
 
-            //let height = end.y - baseline_y - 0.5;
-            //let rows = (height / line_height).ceil() as usize;
+            // The correct code, uncomment when glyphs report a correct `y` value.
+            //
+            // let height = end.y - baseline_y - 0.5;
+            // let rows = (height / line_height).ceil() as usize;
+            //
+            // Temporary solution
             let rows = state.selection.end.line - state.selection.start.line + 1;
 
             for row in 0..rows {
