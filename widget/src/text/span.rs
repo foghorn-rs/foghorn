@@ -1,7 +1,7 @@
 use iced_widget::core::{
     Color, Font, font,
-    font::{Family, Weight},
-    text::{self, Fragment, IntoFragment},
+    font::{Family, Style, Weight},
+    text::{self, Fragment, IntoFragment, Shaping},
 };
 use std::borrow::Cow;
 
@@ -102,6 +102,43 @@ impl<'a, Link> SignalSpan<'a, Link> {
             link: self.link,
             spoiler_tag: self.spoiler_tag,
         }
+    }
+
+    /// Produces a [`Text`] widget from the given [`SignalSpan`].
+    ///
+    /// Only the [`monospace`], [`italic`] and [`bold`] styles are applied.
+    ///
+    /// [`Text`]: iced_widget::Text
+    /// [`monospace`]: SignalSpan::monospace
+    /// [`italic`]: SignalSpan::italic
+    /// [`bold`]: SignalSpan::bold
+    pub fn as_text_widget(&'a self) -> iced_widget::Text<'a> {
+        let font = Font {
+            family: if self.monospace() {
+                Family::Monospace
+            } else {
+                Family::default()
+            },
+            weight: if self.bold() {
+                Weight::Bold
+            } else {
+                Weight::Normal
+            },
+            style: if self.italic() {
+                Style::Italic
+            } else {
+                Style::Normal
+            },
+            ..Font::DEFAULT
+        };
+
+        iced_widget::text(&self.text)
+            .font(font)
+            .shaping(Shaping::Auto)
+    }
+
+    pub fn is_simple_text(&self) -> bool {
+        !self.spoiler() && !self.mention() && !self.strikethrough() && self.link.is_none()
     }
 }
 
