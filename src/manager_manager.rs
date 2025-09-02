@@ -17,16 +17,16 @@ use presage::{
     proto::{DataMessage, EditMessage, SyncMessage, sync_message::Sent},
     store::{ContentsStore as _, Store},
 };
-use presage_store_sled::{MigrationConflictStrategy, SledStore};
+use presage_store_sqlite::SqliteStore;
 use std::{cell::RefCell, collections::HashMap, pin::pin, rc::Rc, sync::Arc};
 use tokio::{
     runtime::Builder,
     task::{self, LocalSet},
 };
 
-pub type RegisteredManager = presage::Manager<SledStore, Registered>;
-pub type LinkingManager = presage::Manager<SledStore, Linking>;
-pub type ManagerError = presage::Error<<SledStore as Store>::Error>;
+pub type RegisteredManager = presage::Manager<SqliteStore, Registered>;
+pub type LinkingManager = presage::Manager<SqliteStore, Linking>;
+pub type ManagerError = presage::Error<<SqliteStore as Store>::Error>;
 
 enum Event {
     LoadRegistered(oneshot::Sender<ManagerError>),
@@ -144,9 +144,8 @@ impl ManagerManager {
 }
 
 async fn manager_manager(mut receiver: mpsc::Receiver<Event>) {
-    let store = SledStore::open(
-        "",
-        MigrationConflictStrategy::BackupAndDrop,
+    let store = SqliteStore::open(
+        concat!(env!("CARGO_MANIFEST_DIR"), "/foghorn.db"),
         OnNewIdentity::Trust,
     )
     .await
@@ -236,6 +235,7 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Event>) {
                         sender: manager.registration_data().service_ids.aci().into(),
                         destination: manager.registration_data().service_ids.aci().into(),
                         sender_device: manager.registration_data().device_id.unwrap_or_default(),
+
                         timestamp: Timestamp::now().as_millisecond() as u64,
                         needs_receipt: true,
                         unidentified_sender: false,

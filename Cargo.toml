@@ -18,8 +18,8 @@ iced_split = { git = "https://github.com/edwloef/iced_split", branch = "main" }
 jiff = "0.2.16"
 mime = "0.3.17"
 notify-rust = "4.11.7"
-presage = { git = "https://github.com/whisperfish/presage", rev = "58300b9" }
-presage-store-sled = { git = "https://github.com/whisperfish/presage", rev = "58300b9" }
+presage = { git = "https://github.com/whisperfish/presage", rev = "adbfc0a" }
+presage-store-sqlite = { git = "https://github.com/whisperfish/presage", rev = "adbfc0a" }
 tokio = "1.48.0"
 tracing.workspace = true
 tracing-subscriber = { version = "0.3.20", features = ["json"] }
