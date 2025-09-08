@@ -115,7 +115,8 @@ impl Message {
                         Element::from(
                             SignalRich::new()
                                 .with_spans(body)
-                                .wrapping(Wrapping::WordOrGlyph),
+                                .wrapping(Wrapping::WordOrGlyph)
+                                .on_mention_click(app::Message::Mention),
                         )
                     }
                 })

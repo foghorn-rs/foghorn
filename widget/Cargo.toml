@@ -6,8 +6,8 @@ license.workspace = true
 
 [dependencies]
 iced_widget.workspace = true
+unicode-segmentation.workspace = true
+uuid.workspace = true
 
 tracing.workspace = true
 tracing.features = ["log"]
-
-unicode-segmentation.workspace = true

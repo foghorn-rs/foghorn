@@ -80,7 +80,7 @@ impl Chat {
         }
     }
 
-    fn contact(&self) -> Option<Arc<Contact>> {
+    pub(crate) fn contact(&self) -> Option<Arc<Contact>> {
         match self {
             Self::Contact(contact) => Some(contact.clone()),
             Self::Group(_) => None,
@@ -190,7 +190,7 @@ impl Message {
 
         Self {
             timestamp: Timestamp::from_millisecond(timestamp as i64).unwrap(),
-            body: body_ranges_to_signal_spans(body, body_ranges),
+            body: body_ranges_to_signal_spans(body, body_ranges, cache),
             attachments: attachments
                 .into_iter()
                 .map(|ptr| Attachment::new(ptr, manager))
@@ -220,7 +220,7 @@ impl Quote {
     ) -> Self {
         Self {
             timestamp: Timestamp::from_millisecond(quote.id.unwrap_or_default() as i64).unwrap(),
-            body: body_ranges_to_signal_spans(quote.text, quote.body_ranges),
+            body: body_ranges_to_signal_spans(quote.text, quote.body_ranges, cache),
             attachments: quote
                 .attachments
                 .into_iter()
@@ -668,10 +668,10 @@ async fn get_group_cached(
     let chat = Thread::Group(key);
     let group = manager.store().group(key).await.ok()??;
 
-    if group.revision == revision {
-        if let Some(chat) = cache.borrow().get(&chat) {
-            return Some(chat.clone());
-        }
+    if group.revision == revision
+        && let Some(chat) = cache.borrow().get(&chat)
+    {
+        return Some(chat.clone());
     }
 
     let mut members = vec![];

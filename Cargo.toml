@@ -36,12 +36,13 @@ members = ["widget"]
 version = "0.0.0"
 edition = "2024"
 license = "AGPL-3.0-only"
-rust-version = "1.87.0"
+rust-version = "1.88.0"
 
 [workspace.dependencies]
 iced_widget = "0.14.0-dev"
 tracing = "0.1.41"
 unicode-segmentation = "1.12.0"
+uuid = "1"
 
 [patch.crates-io]
 curve25519-dalek = { git = 'https://github.com/signalapp/curve25519-dalek', tag = 'signal-curve25519-4.1.3' }

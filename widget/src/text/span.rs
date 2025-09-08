@@ -4,6 +4,7 @@ use iced_widget::core::{
     text::{self, Fragment, IntoFragment, Shaping},
 };
 use std::borrow::Cow;
+use uuid::Uuid;
 
 pub const MENTION: u8 = 1 << 0;
 pub const BOLD: u8 = 1 << 1;
@@ -21,6 +22,8 @@ pub struct SignalSpan<'a, Link = ()> {
     pub flags: u8,
     /// The link of the [`SignalSpan`].
     pub link: Option<Link>,
+    /// The mention of the [`SignalSpan`].
+    pub mention: Option<Uuid>,
     /// Allows spoiler [`SignalSpan`]s to be rendered as one.
     pub spoiler_tag: Option<usize>,
 }
@@ -49,6 +52,18 @@ impl<'a, Link> SignalSpan<'a, Link> {
     /// Sets the link of the [`SignalSpan`], if any.
     pub fn link_maybe(mut self, link: Option<impl Into<Link>>) -> Self {
         self.link = link.map(Into::into);
+        self
+    }
+
+    /// Sets the mention of the [`SignalSpan`].
+    pub fn set_mention(mut self, mention: impl Into<Uuid>) -> Self {
+        self.mention = Some(mention.into());
+        self
+    }
+
+    /// Sets the mention of the [`SignalSpan`], if any.
+    pub fn set_mention_maybe(mut self, mention: Option<impl Into<Uuid>>) -> Self {
+        self.mention = mention.map(Into::into);
         self
     }
 
@@ -100,6 +115,7 @@ impl<'a, Link> SignalSpan<'a, Link> {
             text: Cow::Owned(self.text.into_owned()),
             flags: self.flags,
             link: self.link,
+            mention: self.mention,
             spoiler_tag: self.spoiler_tag,
         }
     }
@@ -148,6 +164,7 @@ impl<Link> Default for SignalSpan<'_, Link> {
             text: Cow::Borrowed(""),
             flags: 0,
             link: None,
+            mention: None,
             spoiler_tag: None,
         }
     }

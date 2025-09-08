@@ -20,6 +20,7 @@ use iced_widget::{
     graphics::text::Paragraph,
 };
 pub use selection::{Selection, SelectionEnd};
+use uuid::Uuid;
 
 /// A bunch of [`SignalRich`] text.
 #[expect(missing_debug_implementations)]
@@ -38,7 +39,7 @@ pub struct SignalRich<'a, Link, Message> {
     hovered_mention: Option<usize>,
     hovered_spoiler: Option<usize>,
     on_link_click: Option<Box<dyn Fn(Link) -> Message + 'a>>,
-    on_mention_click: Option<Box<dyn Fn(String) -> Message + 'a>>,
+    on_mention_click: Option<Box<dyn Fn(Uuid) -> Message + 'a>>,
 }
 
 impl<'a, Link, Message> SignalRich<'a, Link, Message>
@@ -136,7 +137,7 @@ where
 
     /// Sets the message that will be produced when a mention of the [`SignalRich`] text
     /// is clicked.
-    pub fn on_mention_click(mut self, on_mention_clicked: impl Fn(String) -> Message + 'a) -> Self {
+    pub fn on_mention_click(mut self, on_mention_clicked: impl Fn(Uuid) -> Message + 'a) -> Self {
         self.on_mention_click = Some(Box::new(on_mention_clicked));
         self
     }
@@ -334,7 +335,7 @@ where
                     for bounds in &regions {
                         renderer.fill_quad(
                             Quad {
-                                bounds: bounds.shrink([2, 0]) + translation,
+                                bounds: bounds.expand([0, 2]) + translation,
                                 border: border::rounded(5),
                                 ..Default::default()
                             },
@@ -582,7 +583,9 @@ where
             | Event::Touch(touch::Event::FingerLost { .. }) => {
                 state.is_dragging = false;
 
-                if !matches!(event, Event::Touch(touch::Event::FingerLost { .. })) {
+                if !matches!(event, Event::Touch(touch::Event::FingerLost { .. }))
+                    && state.selection.is_empty()
+                {
                     match state.span_pressed {
                         Some(span) if Some(span) == self.hovered_link => {
                             if let Some((link, on_link_clicked)) = self
@@ -598,7 +601,7 @@ where
                             if let Some((mention, on_mention_clicked)) = self
                                 .spans
                                 .get(span)
-                                .map(|span| span.text.clone().into_owned())
+                                .and_then(|span| span.mention)
                                 .zip(self.on_mention_click.as_deref())
                             {
                                 shell.publish(on_mention_clicked(mention));

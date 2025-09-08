@@ -1519,6 +1519,7 @@ dependencies = [
  "iced_widget",
  "tracing",
  "unicode-segmentation",
+ "uuid",
 ]
 
 [[package]]

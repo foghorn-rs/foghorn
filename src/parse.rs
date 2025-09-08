@@ -1,9 +1,19 @@
-use crate::widget::{SignalSpan, text::span::SPOILER};
-use presage::proto::{
-    BodyRange,
-    body_range::{AssociatedValue, Style},
+use crate::{
+    message::Chat,
+    widget::{
+        SignalSpan,
+        text::span::{MENTION, SPOILER},
+    },
 };
-use std::{collections::HashMap, mem::take};
+use presage::{
+    libsignal_service::prelude::Uuid,
+    proto::{
+        BodyRange,
+        body_range::{AssociatedValue, Style},
+    },
+    store::Thread,
+};
+use std::{cell::RefCell, collections::HashMap, mem::take};
 
 /// bold: **text**
 /// italic:  *text*
@@ -108,10 +118,10 @@ pub fn markdown_to_body_ranges(input: &str) -> (String, Vec<BodyRange>) {
     };
 
     let update_pos = |last: Option<&mut _>, pos, diff| {
-        if let Some(last) = last {
-            if *last > pos {
-                *last += diff;
-            }
+        if let Some(last) = last
+            && *last > pos
+        {
+            *last += diff;
         }
     };
 
@@ -168,10 +178,12 @@ pub fn markdown_to_body_ranges(input: &str) -> (String, Vec<BodyRange>) {
 pub fn body_ranges_to_signal_spans(
     body: Option<String>,
     body_ranges: Vec<BodyRange>,
+    cache: &RefCell<HashMap<Thread, Chat>>,
 ) -> Option<Vec<SignalSpan<'static>>> {
     let body = body.filter(|body| !body.is_empty())?;
 
     let mut flags = vec![0u8; body.chars().count()];
+    let mut mentions = HashMap::new();
     let mut spoiler_tags = HashMap::new();
     let mut next_spoiler_tag = 0;
 
@@ -179,11 +191,17 @@ pub fn body_ranges_to_signal_spans(
         let start = range.start() as usize;
         let end = start + range.length() as usize;
 
+        let mut mention: Option<Uuid> = None;
+
         let Some(style) = range
             .associated_value
             .as_ref()
             .and_then(|value| match value {
-                AssociatedValue::MentionAci(_) => Some(0),
+                AssociatedValue::MentionAci(aci) => {
+                    mention = aci.parse().ok();
+
+                    Some(0)
+                }
                 AssociatedValue::Style(style @ 1..=5) => Some(*style),
                 AssociatedValue::Style(_) => None,
             })
@@ -196,6 +214,16 @@ pub fn body_ranges_to_signal_spans(
             next_spoiler_tag += 1;
         }
 
+        if let Some(uuid) = mention
+            && let Some(name) = cache
+                .borrow()
+                .get(&Thread::Contact(uuid))?
+                .contact()
+                .map(|contact| contact.name.clone())
+        {
+            mentions.insert(start, (uuid, name));
+        }
+
         for flag in &mut flags[start..end] {
             *flag |= 1 << style;
         }
@@ -205,12 +233,14 @@ pub fn body_ranges_to_signal_spans(
     let mut last_flag = flags[0];
     let in_progress_span = &mut String::new();
     let mut spoiler_tag = None;
+    let mut mention = None;
 
     for ((index, flag), c) in flags.iter().enumerate().zip(body.chars()) {
         if last_flag != *flag {
             spans.push(
                 SignalSpan::new(take(in_progress_span))
                     .flags(last_flag)
+                    .set_mention_maybe(mention.take())
                     .spoiler_tag_maybe(spoiler_tag),
             );
 
@@ -223,7 +253,12 @@ pub fn body_ranges_to_signal_spans(
             spoiler_tag = None;
         }
 
-        in_progress_span.push(c);
+        if let Some((uuid, name)) = mentions.get(&index) {
+            in_progress_span.push_str(name);
+            mention = Some(*uuid);
+        } else if flag & MENTION == 0 {
+            in_progress_span.push(c);
+        }
     }
 
     spans.push(
@@ -303,7 +338,9 @@ mod test {
             ]
         );
 
-        let output = body_ranges_to_signal_spans(Some(output), ranges).unwrap();
+        let output =
+            body_ranges_to_signal_spans(Some(output), ranges, &RefCell::new(HashMap::new()))
+                .unwrap();
 
         assert_eq!(
             output,
@@ -312,78 +349,91 @@ mod test {
                     text: Cow::Borrowed(r"testing "),
                     flags: 0,
                     link: None,
+                    mention: None,
                     spoiler_tag: None
                 },
                 SignalSpan {
                     text: Cow::Borrowed(r"rich text"),
                     flags: BOLD | ITALIC,
                     link: None,
+                    mention: None,
                     spoiler_tag: None
                 },
                 SignalSpan {
                     text: Cow::Borrowed(r" "),
                     flags: 0,
                     link: None,
+                    mention: None,
                     spoiler_tag: None
                 },
                 SignalSpan {
                     text: Cow::Borrowed(r"(fancy \** escaping)"),
                     flags: STRIKETHROUGH,
                     link: None,
+                    mention: None,
                     spoiler_tag: None
                 },
                 SignalSpan {
                     text: Cow::Borrowed(r" "),
                     flags: 0,
                     link: None,
+                    mention: None,
                     spoiler_tag: None
                 },
                 SignalSpan {
                     text: Cow::Borrowed(r"this is a "),
                     flags: SPOILER,
                     link: None,
+                    mention: None,
                     spoiler_tag: Some(0)
                 },
                 SignalSpan {
                     text: Cow::Borrowed(r"monospace spoiler"),
                     flags: SPOILER | MONOSPACE,
                     link: None,
+                    mention: None,
                     spoiler_tag: Some(0)
                 },
                 SignalSpan {
                     text: Cow::Borrowed(r"italic"),
                     flags: SPOILER | ITALIC,
                     link: None,
+                    mention: None,
                     spoiler_tag: Some(1)
                 },
                 SignalSpan {
                     text: Cow::Borrowed(r" "),
                     flags: SPOILER,
                     link: None,
+                    mention: None,
                     spoiler_tag: Some(1)
                 },
                 SignalSpan {
                     text: Cow::Borrowed(r"bold"),
                     flags: SPOILER | BOLD,
                     link: None,
+                    mention: None,
                     spoiler_tag: Some(1)
                 },
                 SignalSpan {
                     text: Cow::Borrowed(r" "),
                     flags: SPOILER,
                     link: None,
+                    mention: None,
                     spoiler_tag: Some(1)
                 },
                 SignalSpan {
                     text: Cow::Borrowed(r"strikethrough"),
                     flags: SPOILER | STRIKETHROUGH,
                     link: None,
+                    mention: None,
                     spoiler_tag: Some(1)
                 },
                 SignalSpan {
                     text: Cow::Borrowed(r" spoiler"),
                     flags: SPOILER,
                     link: None,
+                    mention: None,
                     spoiler_tag: Some(1)
                 },
             ]

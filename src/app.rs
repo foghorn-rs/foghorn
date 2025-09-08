@@ -19,7 +19,7 @@ use iced::{
 use iced_split::{Split, Strategy};
 use jiff::{Timestamp, tz::TimeZone};
 use notify_rust::Notification;
-use presage::libsignal_service::provisioning::ProvisioningError;
+use presage::libsignal_service::{prelude::Uuid, provisioning::ProvisioningError};
 use std::{
     cmp::Reverse,
     collections::{BTreeMap, HashMap},
@@ -40,6 +40,7 @@ pub enum Message {
     OpenChat(message::Chat),
     NextChat,
     PreviousChat,
+    Mention(Uuid),
     Quote(Option<Arc<message::Message>>),
     SplitAt(f32),
     ContentEdit(text_editor::Action),
@@ -210,6 +211,11 @@ impl App {
                     return self.update(Message::OpenChat(chat));
                 }
             }
+            Message::Mention(uuid) => {
+                if let Some(chat) = self.chats.keys().find(|chat| chat.uuid() == Some(uuid)) {
+                    return self.update(Message::OpenChat(chat.clone()));
+                }
+            }
             Message::Quote(quote) => self.quote = quote.as_deref().cloned().map(Into::into),
             Message::SplitAt(split_at) => self.split_at = split_at.clamp(153.0, 313.5),
             Message::Now(now) => self.now = Some(now),
@@ -228,6 +234,7 @@ impl App {
                 .map(Message::Received);
             }
         }
+
         Task::none()
     }
 
