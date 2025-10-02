@@ -13,7 +13,7 @@ iced = { version = "0.14.0-dev", features = [
   "tokio",
   "advanced",
 ] }
-iced_dialog = { git = "https://github.com/pml68/iced_dialog", branch = "master" }
+iced_dialog = { git = "https://git.sr.ht/~pml68/iced_dialog", branch = "master" }
 iced_split = { git = "https://github.com/edwloef/iced_split", branch = "main" }
 bytes = "1.10.1"
 image = "0.25.6"

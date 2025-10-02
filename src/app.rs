@@ -11,10 +11,7 @@ use iced::{
     futures::channel::oneshot,
     keyboard, padding,
     time::every,
-    widget::{
-        button, column, container, horizontal_rule, horizontal_space, qr_code, scrollable, text,
-        text_editor,
-    },
+    widget::{button, column, container, qr_code, rule, scrollable, space, text, text_editor},
 };
 use iced_split::{Split, Strategy};
 use jiff::{Timestamp, tz::TimeZone};
@@ -243,7 +240,7 @@ impl App {
         contacts.sort_by_key(|c| Reverse(self.chats[c].last_key_value().map(|(k, _)| k)));
         let contacts = column![
             "Chats",
-            horizontal_rule(11),
+            rule::horizontal(11),
             scrollable(
                 column(contacts.into_iter().map(|c| {
                     button(c.as_iced_widget())
@@ -265,7 +262,7 @@ impl App {
 
             column![
                 text(open_chat.name()),
-                horizontal_rule(1),
+                rule::horizontal(1),
                 scrollable(
                     column(
                         self.chats[open_chat]
@@ -280,7 +277,7 @@ impl App {
                 self.quote
                     .as_ref()
                     .map(|quote| quote.as_iced_widget(&now, tz)),
-                horizontal_rule(1)
+                rule::horizontal(1)
             ]
             .push(
                 text_editor(&self.message_content)
@@ -320,7 +317,7 @@ impl App {
             .padding(padding::all(5).left(0))
             .into()
         } else {
-            Element::new(horizontal_space())
+            Element::new(space::horizontal())
         };
 
         let base =

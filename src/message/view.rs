@@ -3,7 +3,7 @@ use crate::{app, icons::reply, widget::SignalRich};
 use iced::{
     Alignment, Element, Fill, Shrink,
     border::{self, radius},
-    widget::{button, column, container, horizontal_space, image, row, text, text::Wrapping},
+    widget::{button, column, container, image, row, space, text, text::Wrapping},
 };
 use jiff::{Span, Unit, Zoned, fmt::friendly::SpanPrinter, tz::TimeZone};
 use std::sync::Arc;
@@ -28,7 +28,7 @@ impl Chat {
 
         row![
             avatar.clone().map(|handle| image(handle).height(50)),
-            horizontal_space(),
+            space::horizontal(),
             text(name)
         ]
         .align_y(Alignment::Center)
@@ -52,6 +52,7 @@ impl Quote {
             column![
                 text(head).size(10),
                 self.body.as_deref().map(|body| {
+                    // TODO: add selectable Text widget
                     if body.len() == 1 && body[0].is_simple_text() {
                         Element::from(body[0].as_text_widget())
                     } else {
@@ -109,6 +110,7 @@ impl Message {
             column![
                 text(head).size(10),
                 self.body.as_deref().map(|body| {
+                    // TODO: add selectable Text widget
                     if body.len() == 1 && body[0].is_simple_text() {
                         Element::from(body[0].as_text_widget())
                     } else {
@@ -158,7 +160,7 @@ impl Message {
                 .align_y(Alignment::Center)
                 .into(),
             ),
-            Some(horizontal_space().into()),
+            Some(space::horizontal().into()),
         ];
 
         if self.sender.is_self {
