@@ -2064,7 +2064,7 @@ dependencies = [
 [[package]]
 name = "iced_dialog"
 version = "0.14.0-dev"
-source = "git+https://git.sr.ht/~pml68/iced_dialog?branch=master#fe009960b68f6592a2aad5208d334e8b8f9334da"
+source = "git+https://git.sr.ht/~pml68/iced_dialog?branch=master#75bee89dd34d53a2344e58c6717b8a1eae7ecab3"
 dependencies = [
  "iced_core",
  "iced_widget",
@@ -2142,7 +2142,7 @@ dependencies = [
 [[package]]
 name = "iced_split"
 version = "0.1.0"
-source = "git+https://github.com/edwloef/iced_split?branch=main#4691b42f0ab1bc7a2d8492deb92705400b561c34"
+source = "git+https://github.com/edwloef/iced_split?branch=main#cb34b0baebd577835ab093042222c39f71f63c2d"
 dependencies = [
  "iced_widget",
 ]
