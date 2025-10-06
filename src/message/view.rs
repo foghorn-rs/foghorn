@@ -52,7 +52,6 @@ impl Quote {
             column![
                 text(head).size(10),
                 self.body.as_deref().map(|body| {
-                    // TODO: add selectable Text widget
                     if body.len() == 1 && body[0].is_simple_text() {
                         Element::from(body[0].as_text_widget())
                     } else {
@@ -110,7 +109,6 @@ impl Message {
             column![
                 text(head).size(10),
                 self.body.as_deref().map(|body| {
-                    // TODO: add selectable Text widget
                     if body.len() == 1 && body[0].is_simple_text() {
                         Element::from(body[0].as_text_widget())
                     } else {

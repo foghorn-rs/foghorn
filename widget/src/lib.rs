@@ -1,2 +1,2 @@
 pub mod text;
-pub use text::{SignalRich, SignalSpan};
+pub use text::{SignalRich, SignalSpan, Text};

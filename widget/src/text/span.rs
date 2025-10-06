@@ -128,7 +128,7 @@ impl<'a, Link> SignalSpan<'a, Link> {
     /// [`monospace`]: SignalSpan::monospace
     /// [`italic`]: SignalSpan::italic
     /// [`bold`]: SignalSpan::bold
-    pub fn as_text_widget(&'a self) -> iced_widget::Text<'a> {
+    pub fn as_text_widget(&'a self) -> super::Text<'a> {
         let font = Font {
             family: if self.monospace() {
                 Family::Monospace
@@ -148,7 +148,7 @@ impl<'a, Link> SignalSpan<'a, Link> {
             ..Font::DEFAULT
         };
 
-        iced_widget::text(&self.text)
+        super::Text::new(&self.text)
             .font(font)
             .shaping(Shaping::Auto)
     }
