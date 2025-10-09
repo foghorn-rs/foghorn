@@ -53,7 +53,7 @@ impl Quote {
                 text(head).size(10),
                 self.body.as_deref().map(|body| {
                     if body.len() == 1 && body[0].is_simple_text() {
-                        Element::from(body[0].as_text_widget())
+                        Element::from(body[0].as_text_widget().wrapping(Wrapping::WordOrGlyph))
                     } else {
                         Element::from(
                             SignalRich::new()
@@ -110,7 +110,7 @@ impl Message {
                 text(head).size(10),
                 self.body.as_deref().map(|body| {
                     if body.len() == 1 && body[0].is_simple_text() {
-                        Element::from(body[0].as_text_widget())
+                        Element::from(body[0].as_text_widget().wrapping(Wrapping::WordOrGlyph))
                     } else {
                         Element::from(
                             SignalRich::new()

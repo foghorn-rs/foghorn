@@ -244,17 +244,12 @@ where
         }
 
         let was_hovered = state.is_hovered;
+        let selection_before = state.selection;
         state.is_hovered = click_position.is_some();
-
-        if state.is_hovered != was_hovered {
-            shell.request_redraw();
-        }
 
         match event {
             Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left))
             | Event::Touch(touch::Event::FingerPressed { .. }) => {
-                let selection_before = state.selection;
-
                 if let Some(cursor_position) = click_position {
                     let target = cursor_position - core::Vector::new(bounds.x, bounds.y);
 
@@ -285,14 +280,12 @@ where
                                 state.grapheme_line_and_index(target).unwrap_or((0, 0));
 
                             state.selection.select_word(line, index, &state.paragraph);
-
                             state.is_dragging = false;
                         }
                         click::Kind::Triple => {
                             let (line, _) = state.grapheme_line_and_index(target).unwrap_or((0, 0));
 
                             state.selection.select_line(line, &state.paragraph);
-
                             state.is_dragging = false;
                         }
                     }
@@ -303,10 +296,6 @@ where
                 } else {
                     state.selection = Selection::default();
                 }
-
-                if selection_before != state.selection {
-                    shell.request_redraw();
-                }
             }
             Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left))
             | Event::Touch(touch::Event::FingerLifted { .. })
@@ -316,19 +305,12 @@ where
             Event::Mouse(mouse::Event::CursorMoved { position })
             | Event::Touch(touch::Event::FingerMoved { position, .. }) => {
                 if state.is_dragging {
-                    let selection_before = state.selection;
-
                     let target = *position - core::Vector::new(bounds.x, bounds.y);
-
                     let (line, index) = state.grapheme_line_and_index(target).unwrap_or((0, 0));
 
                     let new_end = SelectionEnd { line, index };
 
                     state.selection.change_selection(new_end);
-
-                    if selection_before != state.selection {
-                        shell.request_redraw();
-                    }
                 }
             }
             Event::Keyboard(keyboard::Event::KeyPressed { key, .. }) => match key.as_ref() {
@@ -346,13 +328,7 @@ where
                     if state.keyboard_modifiers.command()
                         && state.selection != Selection::default() =>
                 {
-                    let selection_before = state.selection;
-
                     state.selection.select_all(&state.paragraph);
-
-                    if selection_before != state.selection {
-                        shell.request_redraw();
-                    }
 
                     shell.capture_event();
                 }
@@ -360,16 +336,10 @@ where
                     if state.keyboard_modifiers.shift()
                         && state.selection != Selection::default() =>
                 {
-                    let selection_before = state.selection;
-
                     if state.keyboard_modifiers.jump() {
                         state.selection.select_beginning();
                     } else {
                         state.selection.select_line_beginning();
-                    }
-
-                    if selection_before != state.selection {
-                        shell.request_redraw();
                     }
 
                     shell.capture_event();
@@ -378,16 +348,10 @@ where
                     if state.keyboard_modifiers.shift()
                         && state.selection != Selection::default() =>
                 {
-                    let selection_before = state.selection;
-
                     if state.keyboard_modifiers.jump() {
                         state.selection.select_end(&state.paragraph);
                     } else {
                         state.selection.select_line_end(&state.paragraph);
-                    }
-
-                    if selection_before != state.selection {
-                        shell.request_redraw();
                     }
 
                     shell.capture_event();
@@ -396,8 +360,6 @@ where
                     if state.keyboard_modifiers.shift()
                         && state.selection != Selection::default() =>
                 {
-                    let selection_before = state.selection;
-
                     if state.keyboard_modifiers.macos_command() {
                         state.selection.select_line_beginning();
                     } else if state.keyboard_modifiers.jump() {
@@ -406,18 +368,12 @@ where
                         state.selection.select_left(&state.paragraph);
                     }
 
-                    if selection_before != state.selection {
-                        shell.request_redraw();
-                    }
-
                     shell.capture_event();
                 }
                 keyboard::Key::Named(key::Named::ArrowRight)
                     if state.keyboard_modifiers.shift()
                         && state.selection != Selection::default() =>
                 {
-                    let selection_before = state.selection;
-
                     if state.keyboard_modifiers.macos_command() {
                         state.selection.select_line_end(&state.paragraph);
                     } else if state.keyboard_modifiers.jump() {
@@ -426,18 +382,12 @@ where
                         state.selection.select_right(&state.paragraph);
                     }
 
-                    if selection_before != state.selection {
-                        shell.request_redraw();
-                    }
-
                     shell.capture_event();
                 }
                 keyboard::Key::Named(key::Named::ArrowUp)
                     if state.keyboard_modifiers.shift()
                         && state.selection != Selection::default() =>
                 {
-                    let selection_before = state.selection;
-
                     if state.keyboard_modifiers.macos_command() {
                         state.selection.select_beginning();
                     } else if state.keyboard_modifiers.jump() {
@@ -446,28 +396,18 @@ where
                         state.selection.select_up(&state.paragraph);
                     }
 
-                    if selection_before != state.selection {
-                        shell.request_redraw();
-                    }
-
                     shell.capture_event();
                 }
                 keyboard::Key::Named(key::Named::ArrowDown)
                     if state.keyboard_modifiers.shift()
                         && state.selection != Selection::default() =>
                 {
-                    let selection_before = state.selection;
-
                     if state.keyboard_modifiers.macos_command() {
                         state.selection.select_end(&state.paragraph);
                     } else if state.keyboard_modifiers.jump() {
                         state.selection.select_line_end(&state.paragraph);
                     } else {
                         state.selection.select_down(&state.paragraph);
-                    }
-
-                    if selection_before != state.selection {
-                        shell.request_redraw();
                     }
 
                     shell.capture_event();
@@ -486,6 +426,10 @@ where
                 state.keyboard_modifiers = *modifiers;
             }
             _ => {}
+        }
+
+        if state.is_hovered != was_hovered || state.selection != selection_before {
+            shell.request_redraw();
         }
     }
 
