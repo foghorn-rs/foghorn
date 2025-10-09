@@ -24,6 +24,7 @@ use std::{
     sync::Arc,
     time::Duration,
 };
+use tokio::task::spawn_blocking;
 
 #[derive(Clone, Debug)]
 pub enum Message {
@@ -153,11 +154,13 @@ impl App {
                                 })
                                 .unwrap_or_default();
 
-                            if let Err(err) = Notification::new()
-                                .summary(&message.sender.name)
-                                .body(&body)
-                                .show_async()
-                                .await
+                            if let Ok(Err(err)) = spawn_blocking(move || {
+                                Notification::new()
+                                    .summary(&message.sender.name)
+                                    .body(&body)
+                                    .show()
+                            })
+                            .await
                             {
                                 warn!("{err}");
                             }
