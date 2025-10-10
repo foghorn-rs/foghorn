@@ -630,10 +630,12 @@ where
                     state.span_pressed = None;
                 }
             }
-            Event::Mouse(mouse::Event::CursorMoved { position })
-            | Event::Touch(touch::Event::FingerMoved { position, .. }) => {
-                if state.is_dragging {
-                    let target = *position - Vector::new(bounds.x, bounds.y);
+            Event::Mouse(mouse::Event::CursorMoved { .. })
+            | Event::Touch(touch::Event::FingerMoved { .. }) => {
+                if let Some(cursor_position) = click_position
+                    && state.is_dragging
+                {
+                    let target = cursor_position - Vector::new(bounds.x, bounds.y);
 
                     let (line, index) =
                         state.find_grapheme_line_and_index(target).unwrap_or((0, 0));
