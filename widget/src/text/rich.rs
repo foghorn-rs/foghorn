@@ -793,12 +793,16 @@ where
                     shell.capture_event();
                 }
                 keyboard::Key::Named(key::Named::Escape) => {
+                    let selection_before = state.selection;
+
                     state.is_dragging = false;
                     state.selection = Selection::default();
 
                     state.keyboard_modifiers = keyboard::Modifiers::default();
 
-                    shell.capture_event();
+                    if state.selection != selection_before {
+                        shell.capture_event();
+                    }
                 }
                 _ => {}
             },

@@ -420,7 +420,9 @@ where
 
                     state.keyboard_modifiers = keyboard::Modifiers::default();
 
-                    shell.capture_event();
+                    if state.selection != selection_before {
+                        shell.capture_event();
+                    }
                 }
                 _ => {}
             },
