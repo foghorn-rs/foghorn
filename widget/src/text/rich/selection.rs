@@ -80,17 +80,20 @@ impl Selection {
         let lines_total = end.line - start.line + 1;
 
         for (idx, line) in buffer_lines.iter().enumerate().take(lines_total) {
+            let text = line.text();
+            let length = text.len();
+
             if idx == 0 {
                 if lines_total == 1 {
-                    value.push_str(&line.text()[start.index..end.index]);
+                    value.push_str(&text[start.index.min(length)..end.index.min(length)]);
                 } else {
-                    value.push_str(&line.text()[start.index..]);
+                    value.push_str(&dbg!(text)[start.index.min(length)..]);
                     value.push_str(LINE_ENDING);
                 }
             } else if idx == lines_total - 1 {
-                value.push_str(&line.text()[..end.index]);
+                value.push_str(&text[..end.index.min(length)]);
             } else {
-                value.push_str(line.text());
+                value.push_str(text);
                 value.push_str(LINE_ENDING);
             }
         }
