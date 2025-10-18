@@ -13,7 +13,7 @@ use iced::{
     time::every,
     widget::{button, column, container, qr_code, rule, scrollable, space, text, text_editor},
 };
-use iced_split::{Split, Strategy};
+use iced_split::{Strategy, vertical_split};
 use jiff::{Timestamp, tz::TimeZone};
 use notify_rust::Notification;
 use presage::libsignal_service::{prelude::Uuid, provisioning::ProvisioningError};
@@ -323,8 +323,8 @@ impl App {
             Element::new(space::horizontal())
         };
 
-        let base =
-            Split::new(contacts, chat, self.split_at, Message::SplitAt).strategy(Strategy::Start);
+        let base = vertical_split(contacts, chat, self.split_at, Message::SplitAt)
+            .strategy(Strategy::Start);
 
         let dialog = self
             .dialog
