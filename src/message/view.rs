@@ -21,13 +21,12 @@ impl Chat {
             Self::Group(group) => &group.title,
         };
 
-        let avatar = match self {
-            Self::Contact(contact) => &contact.avatar,
-            Self::Group(group) => &group.avatar,
-        };
-
         row![
-            avatar.clone().map(|handle| image(handle).height(50)),
+            match self {
+                Self::Contact(contact) => contact.avatar.clone(),
+                Self::Group(group) => group.avatar.clone(),
+            }
+            .map(|handle| image(handle).height(50)),
             space::horizontal(),
             text(name)
         ]
@@ -43,7 +42,7 @@ impl Quote {
 
         let head = self
             .sender
-            .as_ref()
+            .as_deref()
             .map(|sender| sender.name.clone() + ", ")
             .unwrap_or_default()
             + &timestamp;
@@ -100,7 +99,7 @@ impl Message {
             self.quote
                 .as_ref()
                 .map(|quote| quote.as_iced_widget(now, tz)),
-            (!self.attachments.is_empty()).then_some(column(
+            (!self.attachments.is_empty()).then(|| column(
                 self.attachments
                     .iter()
                     .filter_map(|attachment| attachment.image.clone())

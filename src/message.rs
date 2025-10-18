@@ -255,7 +255,7 @@ impl From<Quote> for data_message::Quote {
             author_aci: value.sender.map(|sender| sender.uuid.to_string()),
             text: value
                 .body
-                .as_ref()
+                .as_deref()
                 .map(|body| body.iter().map(|x| &*x.text).collect::<String>()),
             attachments: value
                 .attachments

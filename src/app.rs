@@ -145,7 +145,7 @@ impl App {
                         return Task::future(async move {
                             let body = message
                                 .body
-                                .as_ref()
+                                .as_deref()
                                 .map(|spans| {
                                     spans
                                         .iter()
@@ -243,23 +243,25 @@ impl App {
         contacts.sort_by_key(|c| Reverse(self.chats[c].last_key_value().map(|(k, _)| k)));
         let contacts = column![
             "Chats",
-            rule::horizontal(11),
+            rule::horizontal(1),
             scrollable(
                 column(contacts.into_iter().map(|c| {
                     button(c.as_iced_widget())
                         .on_press(Message::OpenChat(c.clone()))
                         .padding(5)
-                        .style(button::secondary)
+                        .style(button::subtle)
                         .into()
                 }))
                 .spacing(5)
             )
             .spacing(5)
         ]
+        .spacing(5)
         .padding(padding::all(5).right(0));
 
-        let chat = if let Some(((tz, now), open_chat)) =
-            self.tz.as_ref().zip(self.now).zip(self.open_chat.as_ref())
+        let chat = if let Some(tz) = self.tz.as_ref()
+            && let Some(now) = self.now
+            && let Some(open_chat) = self.open_chat.as_ref()
         {
             let now = now.to_zoned(tz.clone());
 
@@ -276,13 +278,11 @@ impl App {
                 )
                 .height(Fill)
                 .anchor_bottom()
-                .spacing(0),
+                .spacing(5),
                 self.quote
                     .as_ref()
                     .map(|quote| quote.as_iced_widget(&now, tz)),
-                rule::horizontal(1)
-            ]
-            .push(
+                rule::horizontal(1),
                 text_editor(&self.message_content)
                     .min_height(20)
                     .on_action(Message::ContentEdit)
@@ -315,7 +315,7 @@ impl App {
                             binding => binding,
                         })
                     }),
-            )
+            ]
             .spacing(5)
             .padding(padding::all(5).left(0))
             .into()
