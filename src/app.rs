@@ -175,11 +175,7 @@ impl App {
                     }
                 }
                 SignalAction::Replace(old_ts, message) => {
-                    self.chats.get_mut(&chat).unwrap().remove(&old_ts);
-                    self.chats
-                        .get_mut(&chat)
-                        .unwrap()
-                        .insert(message.timestamp, message);
+                    self.chats.get_mut(&chat).unwrap().insert(old_ts, message);
                 }
                 SignalAction::Delete(timestamp) => {
                     self.chats.get_mut(&chat).unwrap().remove(&timestamp);

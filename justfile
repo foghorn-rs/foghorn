@@ -3,6 +3,12 @@ default: build-release
 font:
   curl -fsSLO https://unpkg.com/lucide-static@latest/font/Lucide.ttf
 
+clean:
+  rm Lucide.ttf debug_log.json
+
+clean-all: clean
+  rm -r blobs conf db snap.*
+
 build-debug *args: font
   cargo build {{args}}
 

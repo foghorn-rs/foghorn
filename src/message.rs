@@ -494,14 +494,6 @@ pub async fn decode_content(
 
             debug_assert!(message.sender.is_self);
 
-            // delete the old message, so we don't load it again when starting up the next time
-            manager
-                .store()
-                .clone()
-                .delete_message(&chat.thread(), target_sent_timestamp?)
-                .await
-                .ok()?;
-
             Some((
                 chat,
                 SignalAction::Replace(

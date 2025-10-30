@@ -317,7 +317,7 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Event>) {
                         sender: manager.registration_data().service_ids.aci().into(),
                         destination: manager.registration_data().service_ids.aci().into(),
                         sender_device: manager.registration_data().device_id.unwrap_or_default(),
-                        timestamp: timestamp.as_millisecond() as u64,
+                        timestamp: now,
                         needs_receipt: true,
                         unidentified_sender: false,
                         was_plaintext: true,
@@ -335,6 +335,13 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Event>) {
                             ..Default::default()
                         }),
                     };
+
+                    // delete the old message, so we don't load it again when starting up the next time
+                    let _ = manager
+                        .store()
+                        .clone()
+                        .delete_message(&chat.thread(), timestamp.as_millisecond() as u64)
+                        .await;
 
                     match &chat {
                         Chat::Contact(contact) => manager
