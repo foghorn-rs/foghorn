@@ -13,7 +13,10 @@ use iced::{
     futures::channel::oneshot,
     keyboard, padding,
     time::every,
-    widget::{button, column, container, qr_code, row, rule, scrollable, space, text, text_editor},
+    widget::{
+        button, column, container, operation::focus_next, qr_code, row, rule, scrollable, space,
+        text, text_editor,
+    },
 };
 use iced_split::{Strategy, vertical_split};
 use jiff::{Timestamp, tz::TimeZone};
@@ -186,6 +189,7 @@ impl App {
                 self.open_chat = Some(open_chat);
                 self.message_content = text_editor::Content::new();
                 self.quote = None;
+                return focus_next();
             }
             Message::NextChat => {
                 let mut contacts = self.chats.keys().collect::<Vec<_>>();
@@ -226,6 +230,7 @@ impl App {
                 if was_editing && quote.is_some() {
                     _ = self.update(Message::Edit(None));
                 }
+                return focus_next();
             }
             Message::Edit(message) => {
                 let was_editing = self.editing.is_some();
@@ -241,6 +246,7 @@ impl App {
                         )
                         .unwrap_or_default(),
                     );
+                    return focus_next();
                 } else if was_editing {
                     self.message_content = text_editor::Content::new();
                 }
