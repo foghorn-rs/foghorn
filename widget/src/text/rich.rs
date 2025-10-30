@@ -1,5 +1,8 @@
 use super::SignalSpan;
-use iced_selection::selection::{Selection, SelectionEnd};
+use iced_selection::{
+    selection::{Selection, SelectionEnd},
+    text::Dragging,
+};
 use iced_widget::{
     Renderer,
     core::{
@@ -163,13 +166,13 @@ struct State<Link> {
     revealed_spoilers: Vec<usize>,
     paragraph: Paragraph,
     selection: Selection,
-    is_dragging: bool,
+    dragging: Option<Dragging>,
     last_click: Option<mouse::Click>,
     keyboard_modifiers: keyboard::Modifiers,
 }
 
 impl<Link: Clone> State<Link> {
-    fn find_grapheme_line_and_index(&self, point: Point) -> Option<(usize, usize)> {
+    fn grapheme_line_and_index(&self, point: Point) -> Option<(usize, usize)> {
         let cursor = self.paragraph.buffer().hit(point.x, point.y)?;
 
         let value = self.paragraph.buffer().lines[cursor.line].text();
@@ -184,20 +187,108 @@ impl<Link: Clone> State<Link> {
         ))
     }
 
-    fn selection_end_points(&self) -> [Point; 2] {
+    fn selection_end_points(&self) -> (usize, Point, Point) {
         let Selection { start, end, .. } = self.selection;
 
-        let start_position = self
-            .paragraph
+        let (start_row, start_position) = self
             .grapheme_position(start.line, start.index)
-            .unwrap_or(Point::ORIGIN);
+            .unwrap_or_default();
 
-        let end_position = self
-            .paragraph
+        let (end_row, end_position) = self
             .grapheme_position(end.line, end.index)
-            .unwrap_or(Point::ORIGIN);
+            .unwrap_or_default();
 
-        [start_position, end_position]
+        (
+            end_row.saturating_sub(start_row) + 1,
+            start_position,
+            end_position,
+        )
+    }
+
+    fn grapheme_position(&self, line: usize, index: usize) -> Option<(usize, Point)> {
+        use unicode_segmentation::UnicodeSegmentation;
+
+        let mut first_run_index = None;
+        let mut last_run_index = None;
+        let mut last_start = None;
+        let mut last_grapheme_count = 0;
+        let mut last_run_graphemes = 0;
+        let mut real_index = 0;
+        let mut graphemes_seen = 0;
+
+        let mut glyphs = self
+            .paragraph
+            .buffer()
+            .layout_runs()
+            .enumerate()
+            .filter(|(_, run)| run.line_i == line)
+            .flat_map(|(run_idx, run)| {
+                let line_top = run.line_top;
+
+                if first_run_index.is_none() {
+                    first_run_index = Some(run_idx);
+                }
+
+                run.glyphs.iter().map(move |glyph| {
+                    let mut glyph = glyph.clone();
+                    glyph.y += line_top;
+                    (run_idx, glyph, run.text)
+                })
+            });
+
+        let (_, glyph, _) = glyphs
+            .find(|(run_idx, glyph, text)| {
+                if Some(glyph.start) != last_start {
+                    last_grapheme_count = text[glyph.start..glyph.end].graphemes(false).count();
+                    last_start = Some(glyph.start);
+                    graphemes_seen += last_grapheme_count;
+                    last_run_graphemes += last_grapheme_count;
+                    real_index += last_grapheme_count;
+
+                    if Some(*run_idx) != last_run_index && graphemes_seen < index {
+                        real_index = last_grapheme_count;
+                        last_run_graphemes = last_grapheme_count;
+                    }
+                } else if Some(*run_idx) != last_run_index && graphemes_seen < index {
+                    real_index = 0;
+                    last_run_graphemes = 0;
+                }
+
+                last_run_index = Some(*run_idx);
+
+                graphemes_seen >= index
+            })
+            .or_else(|| glyphs.last())?;
+
+        real_index -= graphemes_seen.saturating_sub(index);
+        real_index = real_index.saturating_sub(last_run_index? - first_run_index?);
+
+        last_run_graphemes = last_run_graphemes.saturating_sub(last_run_index? - first_run_index?);
+
+        let advance = if last_run_index? - first_run_index? <= 1 {
+            if real_index == 0 {
+                0.0
+            } else {
+                glyph.w
+                    * (1.0
+                        - last_run_graphemes.saturating_sub(real_index) as f32
+                            / last_grapheme_count.max(1) as f32)
+                    - glyph.w * (last_run_index? - first_run_index?) as f32
+            }
+        } else {
+            -(glyph.w
+                * (1.0
+                    + last_run_graphemes.saturating_sub(real_index) as f32
+                        / last_grapheme_count.max(1) as f32))
+        };
+
+        Some((
+            last_run_index?,
+            Point::new(
+                glyph.x + glyph.x_offset * glyph.font_size + advance,
+                glyph.y - glyph.y_offset * glyph.font_size,
+            ),
+        ))
     }
 }
 
@@ -216,7 +307,7 @@ where
             revealed_spoilers: vec![],
             paragraph: Paragraph::default(),
             selection: Selection::default(),
-            is_dragging: false,
+            dragging: None,
             last_click: None,
             keyboard_modifiers: keyboard::Modifiers::default(),
         })
@@ -392,24 +483,17 @@ where
         if !state.selection.is_empty() {
             let bounds = layout.bounds();
 
-            let [start, end] = state
-                .selection_end_points()
-                .map(|pos| pos + Vector::new(bounds.x, bounds.y));
+            let (rows, mut start, mut end) = state.selection_end_points();
+            start = start + Vector::new(bounds.x, bounds.y);
+            end = end + Vector::new(bounds.x, bounds.y);
 
             let line_height = self
                 .line_height
                 .to_absolute(self.size.unwrap_or_else(|| renderer.default_size()))
                 .0;
 
-            let baseline_y = bounds.y + ((start.y - bounds.y) / line_height).floor() * line_height;
-
-            // The correct code, uncomment when glyphs report a correct `y` value.
-            //
-            // let height = end.y - baseline_y - 0.5;
-            // let rows = (height / line_height).ceil() as usize;
-            //
-            // Temporary solution
-            let rows = state.selection.end.line - state.selection.start.line + 1;
+            let baseline_y = bounds.y
+                + (((start.y - bounds.y) * 10.0).ceil() / 10.0 / line_height).floor() * line_height;
 
             for row in 0..rows {
                 let (x, width) = if row == 0 {
@@ -468,11 +552,11 @@ where
         let state = tree.state.downcast_mut::<State<Link>>();
 
         let bounds = layout.bounds();
-        let click_position = cursor.position_over(bounds);
+        let click_position = cursor.position_in(bounds);
 
         if viewport.intersection(&bounds).is_none()
             && state.selection == Selection::default()
-            && !state.is_dragging
+            && state.dragging.is_none()
         {
             return;
         }
@@ -480,12 +564,13 @@ where
         let link_was_hovered = self.hovered_link;
         let mention_was_hovered = self.hovered_mention;
         let spoiler_was_hovered = self.hovered_spoiler;
+        let selection_before = state.selection;
 
         self.hovered_link = None;
         self.hovered_mention = None;
         self.hovered_spoiler = None;
 
-        if let Some(position) = click_position.map(|p| p - Vector::new(bounds.x, bounds.y))
+        if let Some(position) = click_position
             && let Some(index) = state.paragraph.hit_span(position)
             && let Some(span) = self.spans.get(index)
         {
@@ -502,18 +587,9 @@ where
             }
         }
 
-        if link_was_hovered != self.hovered_link
-            || spoiler_was_hovered != self.hovered_spoiler
-            || mention_was_hovered != self.hovered_mention
-        {
-            shell.request_redraw();
-        }
-
         match event {
             Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left))
             | Event::Touch(touch::Event::FingerPressed { .. }) => {
-                let selection_before = state.selection;
-
                 if self.hovered_link.is_some() {
                     state.span_pressed = self.hovered_link;
                     shell.capture_event();
@@ -525,21 +601,13 @@ where
                     shell.capture_event();
                 }
 
-                if let Some(cursor_position) = click_position {
-                    let target = cursor_position - Vector::new(bounds.x, bounds.y);
+                if let Some(position) = click_position {
+                    let click = mouse::Click::new(position, mouse::Button::Left, state.last_click);
 
-                    let click =
-                        mouse::Click::new(cursor_position, mouse::Button::Left, state.last_click);
+                    let (line, index) = state.grapheme_line_and_index(position).unwrap_or((0, 0));
 
                     match click.kind() {
                         click::Kind::Single => {
-                            let (line, index) = if target != Point::ORIGIN {
-                                state.find_grapheme_line_and_index(target)
-                            } else {
-                                None
-                            }
-                            .unwrap_or((0, 0));
-
                             let new_end = SelectionEnd { line, index };
 
                             if state.keyboard_modifiers.shift() {
@@ -548,21 +616,15 @@ where
                                 state.selection.select_range(new_end, new_end);
                             }
 
-                            state.is_dragging = true;
+                            state.dragging = Some(Dragging::Grapheme);
                         }
                         click::Kind::Double => {
-                            let (line, index) =
-                                state.find_grapheme_line_and_index(target).unwrap_or((0, 0));
-
                             state.selection.select_word(line, index, &state.paragraph);
-                            state.is_dragging = false;
+                            state.dragging = Some(Dragging::Word);
                         }
                         click::Kind::Triple => {
-                            let (line, _) =
-                                state.find_grapheme_line_and_index(target).unwrap_or((0, 0));
-
                             state.selection.select_line(line, &state.paragraph);
-                            state.is_dragging = false;
+                            state.dragging = Some(Dragging::Line);
                         }
                     }
 
@@ -572,15 +634,11 @@ where
                 } else {
                     state.selection = Selection::default();
                 }
-
-                if selection_before != state.selection {
-                    shell.request_redraw();
-                }
             }
             Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left))
             | Event::Touch(touch::Event::FingerLifted { .. })
             | Event::Touch(touch::Event::FingerLost { .. }) => {
-                state.is_dragging = false;
+                state.dragging = None;
 
                 if !matches!(event, Event::Touch(touch::Event::FingerLost { .. }))
                     && state.selection.is_empty()
@@ -631,22 +689,23 @@ where
             }
             Event::Mouse(mouse::Event::CursorMoved { .. })
             | Event::Touch(touch::Event::FingerMoved { .. }) => {
-                if let Some(cursor_position) = click_position
-                    && state.is_dragging
+                if let Some(position) = click_position
+                    && let Some(dragging) = state.dragging
                 {
-                    let target = cursor_position - Vector::new(bounds.x, bounds.y);
+                    let (line, index) = state.grapheme_line_and_index(position).unwrap_or((0, 0));
 
-                    let (line, index) =
-                        state.find_grapheme_line_and_index(target).unwrap_or((0, 0));
+                    match dragging {
+                        Dragging::Grapheme => {
+                            let new_end = SelectionEnd { line, index };
 
-                    let new_end = SelectionEnd { line, index };
-
-                    let selection_before = state.selection;
-
-                    state.selection.change_selection(new_end);
-
-                    if selection_before != state.selection {
-                        shell.request_redraw();
+                            state.selection.change_selection(new_end);
+                        }
+                        Dragging::Word => {}
+                        Dragging::Line => {
+                            state
+                                .selection
+                                .change_selection_by_line(line, &state.paragraph);
+                        }
                     }
                 }
             }
@@ -665,13 +724,7 @@ where
                     if state.keyboard_modifiers.command()
                         && state.selection != Selection::default() =>
                 {
-                    let selection_before = state.selection;
-
                     state.selection.select_all(&state.paragraph);
-
-                    if selection_before != state.selection {
-                        shell.request_redraw();
-                    }
 
                     shell.capture_event();
                 }
@@ -679,16 +732,10 @@ where
                     if state.keyboard_modifiers.shift()
                         && state.selection != Selection::default() =>
                 {
-                    let selection_before = state.selection;
-
                     if state.keyboard_modifiers.jump() {
                         state.selection.select_beginning();
                     } else {
                         state.selection.select_line_beginning();
-                    }
-
-                    if selection_before != state.selection {
-                        shell.request_redraw();
                     }
 
                     shell.capture_event();
@@ -697,16 +744,10 @@ where
                     if state.keyboard_modifiers.shift()
                         && state.selection != Selection::default() =>
                 {
-                    let selection_before = state.selection;
-
                     if state.keyboard_modifiers.jump() {
                         state.selection.select_end(&state.paragraph);
                     } else {
                         state.selection.select_line_end(&state.paragraph);
-                    }
-
-                    if selection_before != state.selection {
-                        shell.request_redraw();
                     }
 
                     shell.capture_event();
@@ -715,8 +756,6 @@ where
                     if state.keyboard_modifiers.shift()
                         && state.selection != Selection::default() =>
                 {
-                    let selection_before = state.selection;
-
                     if state.keyboard_modifiers.macos_command() {
                         state.selection.select_line_beginning();
                     } else if state.keyboard_modifiers.jump() {
@@ -725,18 +764,12 @@ where
                         state.selection.select_left(&state.paragraph);
                     }
 
-                    if selection_before != state.selection {
-                        shell.request_redraw();
-                    }
-
                     shell.capture_event();
                 }
                 keyboard::Key::Named(key::Named::ArrowRight)
                     if state.keyboard_modifiers.shift()
                         && state.selection != Selection::default() =>
                 {
-                    let selection_before = state.selection;
-
                     if state.keyboard_modifiers.macos_command() {
                         state.selection.select_line_end(&state.paragraph);
                     } else if state.keyboard_modifiers.jump() {
@@ -745,18 +778,12 @@ where
                         state.selection.select_right(&state.paragraph);
                     }
 
-                    if selection_before != state.selection {
-                        shell.request_redraw();
-                    }
-
                     shell.capture_event();
                 }
                 keyboard::Key::Named(key::Named::ArrowUp)
                     if state.keyboard_modifiers.shift()
                         && state.selection != Selection::default() =>
                 {
-                    let selection_before = state.selection;
-
                     if state.keyboard_modifiers.macos_command() {
                         state.selection.select_beginning();
                     } else if state.keyboard_modifiers.jump() {
@@ -765,18 +792,12 @@ where
                         state.selection.select_up(&state.paragraph);
                     }
 
-                    if selection_before != state.selection {
-                        shell.request_redraw();
-                    }
-
                     shell.capture_event();
                 }
                 keyboard::Key::Named(key::Named::ArrowDown)
                     if state.keyboard_modifiers.shift()
                         && state.selection != Selection::default() =>
                 {
-                    let selection_before = state.selection;
-
                     if state.keyboard_modifiers.macos_command() {
                         state.selection.select_end(&state.paragraph);
                     } else if state.keyboard_modifiers.jump() {
@@ -785,16 +806,10 @@ where
                         state.selection.select_down(&state.paragraph);
                     }
 
-                    if selection_before != state.selection {
-                        shell.request_redraw();
-                    }
-
                     shell.capture_event();
                 }
                 keyboard::Key::Named(key::Named::Escape) => {
-                    let selection_before = state.selection;
-
-                    state.is_dragging = false;
+                    state.dragging = None;
                     state.selection = Selection::default();
 
                     state.keyboard_modifiers = keyboard::Modifiers::default();
@@ -809,6 +824,14 @@ where
                 state.keyboard_modifiers = *modifiers;
             }
             _ => {}
+        }
+
+        if link_was_hovered != self.hovered_link
+            || spoiler_was_hovered != self.hovered_spoiler
+            || mention_was_hovered != self.hovered_mention
+            || selection_before != state.selection
+        {
+            shell.request_redraw();
         }
     }
 
