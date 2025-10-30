@@ -1,5 +1,5 @@
-pub mod selection;
 use super::SignalSpan;
+use iced_selection::selection::{Selection, SelectionEnd};
 use iced_widget::{
     Renderer,
     core::{
@@ -19,7 +19,6 @@ use iced_widget::{
     },
     graphics::text::Paragraph,
 };
-pub use selection::{Selection, SelectionEnd};
 use uuid::Uuid;
 
 /// A bunch of [`SignalRich`] text.

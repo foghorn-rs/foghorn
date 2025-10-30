@@ -6,6 +6,7 @@ license.workspace = true
 
 [dependencies]
 iced_widget.workspace = true
+iced_selection.workspace = true
 unicode-segmentation.workspace = true
 uuid.workspace = true
 

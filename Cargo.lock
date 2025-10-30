@@ -1402,6 +1402,7 @@ dependencies = [
 name = "foghorn_widgets"
 version = "0.0.0"
 dependencies = [
+ "iced_selection",
  "iced_widget",
  "tracing",
  "unicode-segmentation",
@@ -2108,6 +2109,15 @@ dependencies = [
  "iced_futures",
  "raw-window-handle",
  "thiserror 2.0.17",
+]
+
+[[package]]
+name = "iced_selection"
+version = "0.1.0"
+source = "git+https://git.sr.ht/~pml68/iced_selection?branch=master#5f672a058cbf3150caf430c54ef380b553111706"
+dependencies = [
+ "iced_widget",
+ "unicode-segmentation",
 ]
 
 [[package]]
