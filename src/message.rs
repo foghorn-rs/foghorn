@@ -1,6 +1,5 @@
 use crate::{
-    avatar::Avatar, log, manager_manager::RegisteredManager, parse::body_ranges_to_signal_spans,
-    widget::SignalSpan,
+    log, manager_manager::RegisteredManager, parse::body_ranges_to_signal_spans, widget::SignalSpan,
 };
 use iced::{
     futures::{SinkExt as _, StreamExt as _, channel::mpsc, stream::FuturesOrdered},
@@ -30,7 +29,6 @@ use std::{
     hash::{Hash, Hasher},
     sync::Arc,
 };
-use tokio::task;
 
 mod view;
 
@@ -680,15 +678,11 @@ async fn get_group_cached(
         }
     }
 
-    let avatar_bytes = manager.retrieve_group_avatar(context).await.ok()?;
-
-    let avatar = match avatar_bytes {
-        Some(bytes) => task::spawn_blocking(|| Avatar::from_bytes(bytes))
-            .await
-            .ok()?
-            .map(Avatar::into_handle),
-        None => None,
-    };
+    let avatar = manager
+        .retrieve_group_avatar(context)
+        .await
+        .ok()?
+        .map(image::Handle::from_bytes);
 
     let group = Group {
         key,
@@ -719,18 +713,11 @@ async fn get_contact_cached(
 
     let profile_key = ProfileKey::create(profile_key.try_into().ok()?);
 
-    let avatar_bytes = manager
+    let avatar = manager
         .retrieve_profile_avatar_by_uuid(uuid, profile_key)
         .await
-        .ok()?;
-
-    let avatar = match avatar_bytes {
-        Some(bytes) => task::spawn_blocking(|| Avatar::from_bytes(bytes))
-            .await
-            .ok()?
-            .map(Avatar::into_handle),
-        None => None,
-    };
+        .ok()?
+        .map(image::Handle::from_bytes);
 
     let contact = Contact {
         key: profile_key.bytes,

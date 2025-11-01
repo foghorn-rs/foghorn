@@ -30,7 +30,7 @@ impl Chat {
                 Self::Contact(contact) => contact.avatar.clone(),
                 Self::Group(group) => group.avatar.clone(),
             }
-            .map(|handle| image(handle).height(50)),
+            .map(|handle| image(handle).height(50).border_radius(25)),
             space::horizontal(),
             text(name)
         ]
@@ -166,7 +166,7 @@ impl Message {
             self.sender
                 .avatar
                 .clone()
-                .map(|handle| image(handle).height(50).into()),
+                .map(|handle| image(handle).height(50).border_radius(25).into()),
             Some(content),
             Some(
                 row(buttons.into_iter().flatten().map(Element::from))
