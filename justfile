@@ -9,7 +9,7 @@ clean:
   rm Lucide.ttf debug_log.json
 
 clean-all: clean
-  rm -r blobs conf db snap.*
+  rm -r foghorn.db foghorn.db-shm foghorn.db-wal
 
 build-debug *args: font
   cargo build {{args}}
@@ -28,4 +28,4 @@ setup-sqlx-db:
     cargo sqlx database setup --database-url "{{database_url}}"
 
 install-sqlx:
-    cargo install sqlx-cli@0.8.3
+    cargo install sqlx-cli@0.8.6

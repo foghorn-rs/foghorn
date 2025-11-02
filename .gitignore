@@ -4,6 +4,8 @@ target/
 *.pdb
 
 foghorn.db
+foghorn.db-shm
+foghorn.db-wal
 
 debug_log.json
 
