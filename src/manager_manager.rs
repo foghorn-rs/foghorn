@@ -234,7 +234,7 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Event>) {
                     let metadata = Metadata {
                         sender: manager.registration_data().service_ids.aci().into(),
                         destination: manager.registration_data().service_ids.aci().into(),
-                        sender_device: manager.registration_data().device_id.unwrap_or_default(),
+                        sender_device: manager.device_id(),
 
                         timestamp: Timestamp::now().as_millisecond() as u64,
                         needs_receipt: true,
@@ -316,7 +316,7 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Event>) {
                     let metadata = Metadata {
                         sender: manager.registration_data().service_ids.aci().into(),
                         destination: manager.registration_data().service_ids.aci().into(),
-                        sender_device: manager.registration_data().device_id.unwrap_or_default(),
+                        sender_device: manager.device_id(),
                         timestamp: now,
                         needs_receipt: true,
                         unidentified_sender: false,
