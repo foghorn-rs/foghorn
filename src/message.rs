@@ -672,7 +672,7 @@ async fn get_group_cached(
 
     for member in group.members {
         if let Some(member) =
-            get_contact_cached(member.uuid, member.profile_key.bytes, manager, cache).await
+            get_contact_cached(member.aci.into(), member.profile_key.bytes, manager, cache).await
         {
             members.push(member.contact()?);
         }

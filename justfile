@@ -6,10 +6,10 @@ font:
   curl -fsSLO https://unpkg.com/lucide-static@latest/font/Lucide.ttf
 
 clean:
-  rm Lucide.ttf debug_log.json
+  rm -f Lucide.ttf debug_log.json
 
 clean-all: clean
-  rm -r foghorn.db foghorn.db-shm foghorn.db-wal
+  rm -f foghorn.db foghorn.db-shm foghorn.db-wal
 
 build-debug *args: font
   cargo build {{args}}
@@ -21,7 +21,7 @@ run-debug *args: font
 
 run-release *args: (run-debug '--release' args)
 
-prepare-sqlx: setup-sqlx-db
+prepare-sqlx: setup-sqlx-db font
     cargo sqlx prepare --workspace --database-url "{{database_url}}"
 
 setup-sqlx-db:
