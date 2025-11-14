@@ -46,6 +46,7 @@ pub enum Message {
     Mention(Uuid),
     Quote(Option<Arc<message::Message>>),
     Edit(Option<Arc<message::Message>>),
+    EditLast,
     Escape,
     SplitAt(f32),
     ContentEdit(text_editor::Action),
@@ -251,6 +252,15 @@ impl App {
                     self.message_content = text_editor::Content::new();
                 }
             }
+            Message::EditLast => {
+                let last_sent = self.open_chat.as_ref().and_then(|chat| {
+                    self.chats[chat]
+                        .values()
+                        .rfind(|message| message.sender.is_self)
+                });
+
+                return self.update(Message::Edit(last_sent.cloned()));
+            }
             Message::Escape => {
                 _ = self.update(Message::Quote(None));
                 _ = self.update(Message::Edit(None));
@@ -371,6 +381,14 @@ impl App {
                                     text_editor::Binding::Select(text_editor::Motion::WordRight),
                                     text_editor::Binding::Delete,
                                 ])
+                            }
+                            text_editor::Binding::Move(text_editor::Motion::Up)
+                                if self
+                                    .message_content
+                                    .line(0)
+                                    .is_none_or(|line| line.text.is_empty()) =>
+                            {
+                                text_editor::Binding::Custom(Message::EditLast)
                             }
                             binding => binding,
                         })
