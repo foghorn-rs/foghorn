@@ -386,7 +386,8 @@ impl App {
                                 if self
                                     .message_content
                                     .line(0)
-                                    .is_none_or(|line| line.text.is_empty()) =>
+                                    .is_none_or(|line| line.text.is_empty())
+                                    && self.message_content.line_count() <= 1 =>
                             {
                                 text_editor::Binding::Custom(Message::EditLast)
                             }
