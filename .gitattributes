@@ -1,0 +1,8 @@
+.sqlx/* -diff
+
+* text=auto eol=lf
+
+# Older git versions try to fix line endings on images, this prevents it.
+*.png binary
+*.jpg binary
+*.ico binary

@@ -3,7 +3,7 @@ database_url := ("sqlite://" + justfile_directory() + "/foghorn.db")
 default: build-release
 
 font:
-  curl -fsSLO https://unpkg.com/lucide-static@latest/font/Lucide.ttf
+  @[ -f Lucide.ttf ] || curl -fsSLO https://unpkg.com/lucide-static@latest/font/Lucide.ttf
 
 clean:
   rm -f Lucide.ttf debug_log.json
