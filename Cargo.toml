@@ -15,7 +15,7 @@ iced = { version = "0.14.0-dev", features = [
 ] }
 iced_dialog = { git = "https://git.sr.ht/~pml68/iced_dialog", branch = "master" }
 iced_split = { git = "https://github.com/edwloef/iced_split", branch = "main" }
-jiff = "0.2.15"
+jiff = "0.2.16"
 mime = "0.3.17"
 notify-rust = "4.11.7"
 presage = { git = "https://github.com/whisperfish/presage", rev = "58300b9" }
