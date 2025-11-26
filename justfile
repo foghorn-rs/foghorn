@@ -12,14 +12,16 @@ clean-all: clean
   rm -f foghorn.db foghorn.db-shm foghorn.db-wal
 
 build-debug *args: font
-  cargo build {{args}}
+  cargo build -F iced/debug {{args}}
 
-build-release *args: (build-debug '--release' args)
+build-release *args: font
+  cargo build --release {{args}}
 
 run-debug *args: font
-  env RUST_BACKTRACE=full cargo run {{args}}
+  env RUST_BACKTRACE=full cargo run -F iced/debug {{args}}
 
-run-release *args: (run-debug '--release' args)
+run-release *args: font
+  env RUST_BACKTRACE=full cargo run --release {{args}}
 
 prepare-sqlx: setup-sqlx-db font
     cargo sqlx prepare --workspace --database-url "{{database_url}}"
