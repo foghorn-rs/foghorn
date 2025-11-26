@@ -370,7 +370,7 @@ pub async fn sync_messages(
         {
             let message_log = format!("{}, {}", message.metadata, message.body);
 
-            if let Some(message) = decode_content(message, manager, cache, false).await {
+            if let Some(message) = Box::pin(decode_content(message, manager, cache, false)).await {
                 c.send(message).await.unwrap();
             } else {
                 log::warn!("Decoding of message failed: {}", message_log);

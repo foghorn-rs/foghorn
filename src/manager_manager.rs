@@ -160,7 +160,7 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Event>) {
                 let store = store.clone();
                 let manager = manager.clone();
                 task::spawn_local(async move {
-                    match RegisteredManager::load_registered(store).await {
+                    match Box::pin(RegisteredManager::load_registered(store)).await {
                         Ok(ok) => *manager.borrow_mut() = Some(ok),
                         Err(err) => c.send(err).unwrap(),
                     }
@@ -195,11 +195,11 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Event>) {
 
                     {
                         let mut manager = manager.clone();
-                        task::spawn_local(async move { manager.request_contacts().await });
+                        task::spawn_local(async move { Box::pin(manager.request_contacts()).await });
                     }
 
                     sync_contacts(&mut manager, &cache, &mut c).await;
-                    sync_messages(&mut manager, &cache, &mut c).await;
+                    Box::pin(sync_messages(&mut manager, &cache, &mut c)).await;
 
                     let mut stream = pin!(manager.receive_messages().await.unwrap());
 
@@ -209,7 +209,8 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Event>) {
                                 let message_log = format!("{}, {}", message.metadata, message.body);
 
                                 if let Some(message) =
-                                    decode_content(*message, &mut manager, &cache, synced).await
+                                    Box::pin(decode_content(*message, &mut manager, &cache, synced))
+                                        .await
                                 {
                                     c.send(message).await.unwrap();
                                 } else {
@@ -254,21 +255,22 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Event>) {
                     };
 
                     match &chat {
-                        Chat::Contact(contact) => manager
+                        Chat::Contact(contact) => Box::pin(manager
                             .send_message(
                                 Aci::from(contact.uuid),
                                 message.clone(),
                                 metadata.timestamp,
-                            )
+                            ))
                             .await
                             .unwrap(),
                         Chat::Group(group) => {
-                            manager
+                            Box::pin(manager
                                 .send_message_to_group(
                                     &group.key,
                                     message.clone(),
                                     metadata.timestamp,
                                 )
+                            )
                                 .await
                                 .unwrap();
                         }
@@ -294,7 +296,7 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Event>) {
                         .unwrap();
 
                     c.send(
-                        decode_content(message, &mut manager, &cache, false)
+                        Box::pin(decode_content(message, &mut manager, &cache, false))
                             .await
                             .unwrap(),
                     )
@@ -344,13 +346,16 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Event>) {
                         .await;
 
                     match &chat {
-                        Chat::Contact(contact) => manager
+                        Chat::Contact(contact) => Box::pin(manager
                             .send_message(Aci::from(contact.uuid), message.clone(), now)
+                        )
                             .await
                             .unwrap(),
                         Chat::Group(group) => {
+                            Box::pin(
                             manager
                                 .send_message_to_group(&group.key, message.clone(), now)
+                            )
                                 .await
                                 .unwrap();
                         }
@@ -376,7 +381,7 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Event>) {
                         .unwrap();
 
                     c.send(
-                        decode_content(message, &mut manager, &cache, false)
+                        Box::pin(decode_content(message, &mut manager, &cache, false))
                             .await
                             .unwrap(),
                     )
