@@ -18,7 +18,7 @@ use presage::{
     store::{ContentsStore as _, Store},
 };
 use presage_store_sqlite::SqliteStore;
-use std::{cell::RefCell, collections::HashMap, pin::pin, rc::Rc, sync::Arc};
+use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Arc};
 use tokio::{
     runtime::Builder,
     task::{self, LocalSet},
@@ -67,13 +67,16 @@ impl Default for ManagerManager {
     fn default() -> Self {
         let (sender, receiver) = mpsc::channel(100);
 
-        std::thread::spawn(move || {
-            Builder::new_current_thread()
-                .enable_all()
-                .build()
-                .unwrap()
-                .block_on(LocalSet::new().run_until(manager_manager(receiver)));
-        });
+        std::thread::Builder::new()
+            .name("manager_manager".to_owned())
+            .spawn(|| {
+                Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .unwrap()
+                    .block_on(LocalSet::new().run_until(manager_manager(receiver)));
+            })
+            .unwrap();
 
         Self {
             sender: sender.clone(),
@@ -172,12 +175,12 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Event>) {
                 let store = store.clone();
                 let manager = manager.clone();
                 task::spawn_local(async move {
-                    match LinkingManager::link_secondary_device(
+                    match Box::pin(LinkingManager::link_secondary_device(
                         store,
                         SignalServers::Production,
                         "foghorn".to_owned(),
                         tx,
-                    )
+                    ))
                     .await
                     {
                         Ok(ok) => *manager.borrow_mut() = Some(ok),
@@ -193,15 +196,15 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Event>) {
                 task::spawn_local(async move {
                     let mut synced = false;
 
-                    {
+                    task::spawn_local({
                         let mut manager = manager.clone();
-                        task::spawn_local(async move { Box::pin(manager.request_contacts()).await });
-                    }
+                        async move { Box::pin(manager.request_contacts()).await }
+                    });
 
-                    sync_contacts(&mut manager, &cache, &mut c).await;
+                    Box::pin(sync_contacts(&mut manager, &cache, &mut c)).await;
                     Box::pin(sync_messages(&mut manager, &cache, &mut c)).await;
 
-                    let mut stream = pin!(manager.receive_messages().await.unwrap());
+                    let mut stream = Box::pin(Box::pin(manager.receive_messages()).await.unwrap());
 
                     while let Some(next) = stream.next().await {
                         match next {
@@ -218,7 +221,9 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Event>) {
                                 }
                             }
                             Received::QueueEmpty => synced = true,
-                            Received::Contacts => sync_contacts(&mut manager, &cache, &mut c).await,
+                            Received::Contacts => {
+                                Box::pin(sync_contacts(&mut manager, &cache, &mut c)).await;
+                            }
                         }
                     }
                 });
@@ -255,24 +260,21 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Event>) {
                     };
 
                     match &chat {
-                        Chat::Contact(contact) => Box::pin(manager
-                            .send_message(
-                                Aci::from(contact.uuid),
+                        Chat::Contact(contact) => Box::pin(manager.send_message(
+                            Aci::from(contact.uuid),
+                            message.clone(),
+                            metadata.timestamp,
+                        ))
+                        .await
+                        .unwrap(),
+                        Chat::Group(group) => {
+                            Box::pin(manager.send_message_to_group(
+                                &group.key,
                                 message.clone(),
                                 metadata.timestamp,
                             ))
                             .await
-                            .unwrap(),
-                        Chat::Group(group) => {
-                            Box::pin(manager
-                                .send_message_to_group(
-                                    &group.key,
-                                    message.clone(),
-                                    metadata.timestamp,
-                                )
-                            )
-                                .await
-                                .unwrap();
+                            .unwrap();
                         }
                     }
 
@@ -346,18 +348,21 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Event>) {
                         .await;
 
                     match &chat {
-                        Chat::Contact(contact) => Box::pin(manager
-                            .send_message(Aci::from(contact.uuid), message.clone(), now)
-                        )
-                            .await
-                            .unwrap(),
+                        Chat::Contact(contact) => Box::pin(manager.send_message(
+                            Aci::from(contact.uuid),
+                            message.clone(),
+                            now,
+                        ))
+                        .await
+                        .unwrap(),
                         Chat::Group(group) => {
-                            Box::pin(
-                            manager
-                                .send_message_to_group(&group.key, message.clone(), now)
-                            )
-                                .await
-                                .unwrap();
+                            Box::pin(manager.send_message_to_group(
+                                &group.key,
+                                message.clone(),
+                                now,
+                            ))
+                            .await
+                            .unwrap();
                         }
                     }
 
