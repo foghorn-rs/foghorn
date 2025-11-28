@@ -14,8 +14,9 @@ use iced::{
     keyboard, padding,
     time::every,
     widget::{
-        button, column, container, operation::focus_next, qr_code, row, rule, scrollable, space,
-        text, text_editor,
+        button, column, container,
+        operation::{RelativeOffset, focus_next, snap_to},
+        qr_code, row, rule, scrollable, space, text, text_editor,
     },
 };
 use iced_split::{Strategy, vertical_split};
@@ -190,7 +191,7 @@ impl App {
                 self.open_chat = Some(open_chat);
                 self.message_content = text_editor::Content::new();
                 self.quote = None;
-                return focus_next();
+                return Task::batch([focus_next(), snap_to("messages", RelativeOffset::END)]);
             }
             Message::NextChat => {
                 let mut contacts = self.chats.keys().collect::<Vec<_>>();
@@ -311,6 +312,7 @@ impl App {
                 }))
                 .spacing(5)
             )
+            .auto_scroll(true)
             .spacing(5)
         ]
         .spacing(5)
@@ -333,8 +335,10 @@ impl App {
                     )
                     .spacing(5),
                 )
+                .id("messages")
+                .auto_scroll(true)
                 .height(Fill)
-                .anchor_bottom()
+                .anchor_top()
                 .spacing(5),
                 self.quote
                     .as_ref()
