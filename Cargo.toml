@@ -50,6 +50,12 @@ iced = { git = "https://github.com/iced-rs/iced", branch = "master" }
 iced_core = { git = "https://github.com/iced-rs/iced", branch = "master" }
 iced_widget = { git = "https://github.com/iced-rs/iced", branch = "master" }
 
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
+
 [workspace.lints.rust]
 missing_copy_implementations = "warn"
 missing_debug_implementations = "warn"
