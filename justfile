@@ -20,6 +20,9 @@ build-debug *args: font db
 build-release *args: font db
   cargo build --release {{args}}
 
+run-hot *args: font db
+  env RUST_BACKTRACE=full cargo hot -F iced/hot {{args}}
+
 run-debug *args: font db
   env RUST_BACKTRACE=full cargo run -F iced/debug {{args}}
 
@@ -34,3 +37,6 @@ setup-sqlx-db:
 
 install-sqlx:
     cargo install sqlx-cli@0.8.6
+
+install-cargo-hot:
+    cargo install cargo-hot --git https://github.com/hecrj/cargo-hot
