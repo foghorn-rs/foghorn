@@ -484,8 +484,8 @@ where
             let bounds = layout.bounds();
 
             let (rows, mut start, mut end) = state.selection_end_points();
-            start = start + Vector::new(bounds.x, bounds.y);
-            end = end + Vector::new(bounds.x, bounds.y);
+            start += Vector::new(bounds.x, bounds.y);
+            end += Vector::new(bounds.x, bounds.y);
 
             let line_height = self
                 .line_height
@@ -677,6 +677,7 @@ where
                                 self.align_x,
                                 self.align_y,
                                 self.wrapping,
+                                renderer.scale_factor(),
                             );
 
                             shell.request_redraw();
@@ -891,6 +892,7 @@ where
                 align_y,
                 shaping: Shaping::Advanced,
                 wrapping,
+                hint_factor: renderer.scale_factor(),
             }) {
                 text::Difference::None => {}
                 text::Difference::Bounds => {
@@ -907,6 +909,7 @@ where
                         align_x,
                         align_y,
                         wrapping,
+                        renderer.scale_factor(),
                     );
                 }
             }
@@ -921,6 +924,7 @@ where
                 align_x,
                 align_y,
                 wrapping,
+                renderer.scale_factor(),
             );
 
             state.selection = Selection::default();
@@ -941,6 +945,7 @@ fn refresh_spans<Link>(
     align_x: Alignment,
     align_y: alignment::Vertical,
     wrapping: Wrapping,
+    hint_factor: Option<f32>,
 ) where
     Link: Clone,
 {
@@ -973,6 +978,7 @@ fn refresh_spans<Link>(
         align_y,
         shaping: Shaping::Advanced,
         wrapping,
+        hint_factor,
     };
 
     state.paragraph = Paragraph::with_spans(text_with_spans);

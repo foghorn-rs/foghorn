@@ -422,16 +422,21 @@ impl App {
     pub fn subscription(&self) -> Subscription<Message> {
         Subscription::batch([
             every(Duration::from_secs(1)).map(|_| Message::Now(Timestamp::now())),
-            keyboard::on_key_press(|key, modifiers| match key.as_ref() {
-                keyboard::Key::Named(keyboard::key::Named::Tab) if modifiers.command() => {
-                    Some(if modifiers.shift() {
-                        Message::PreviousChat
-                    } else {
-                        Message::NextChat
-                    })
+            keyboard::listen().filter_map(|event| {
+                let keyboard::Event::KeyPressed { key, modifiers, .. } = event else {
+                    return None;
+                };
+                match key.as_ref() {
+                    keyboard::Key::Named(keyboard::key::Named::Tab) if modifiers.command() => {
+                        Some(if modifiers.shift() {
+                            Message::PreviousChat
+                        } else {
+                            Message::NextChat
+                        })
+                    }
+                    keyboard::Key::Named(keyboard::key::Named::Escape) => Some(Message::Escape),
+                    _ => None,
                 }
-                keyboard::Key::Named(keyboard::key::Named::Escape) => Some(Message::Escape),
-                _ => None,
             }),
         ])
     }
