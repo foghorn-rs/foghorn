@@ -1,5 +1,5 @@
 pub static LUCIDE_BYTES: &[u8] = include_bytes!("../Lucide.ttf");
-pub static LUCIDE_FONT: iced::Font = iced::Font::with_name("lucide");
+pub static LUCIDE_FONT: iced::Font = iced::Font::new("lucide");
 
 macro_rules! icon {
     ($name:ident = $icon:literal) => {

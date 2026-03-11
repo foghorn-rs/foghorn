@@ -251,7 +251,7 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Event>) {
 
                     let message = DataMessage {
                         body: Some(body.clone()),
-                        attachments: Vec::new(),
+                        attachments: vec![],
                         group_v2: chat.group_context(),
                         profile_key: chat.profile_key().map(Into::into),
                         quote: quote.map(Into::into),
@@ -332,7 +332,7 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Event>) {
                         target_sent_timestamp: Some(timestamp.as_millisecond() as u64),
                         data_message: Some(DataMessage {
                             body: Some(body.clone()),
-                            attachments: Vec::new(),
+                            attachments: vec![],
                             group_v2: chat.group_context(),
                             profile_key: chat.profile_key().map(Into::into),
                             body_ranges: body_ranges.clone(),

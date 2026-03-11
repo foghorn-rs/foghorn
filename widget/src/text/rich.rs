@@ -6,8 +6,8 @@ use iced_selection::{
 use iced_widget::{
     Renderer,
     core::{
-        Clipboard, Color, Element, Event, Font, Layout, Length, Pixels, Point, Rectangle,
-        Renderer as _, Shell, Size, Text, Theme, Vector, Widget, alignment, border, clipboard,
+        Color, Element, Event, Font, Layout, Length, Pixels, Point, Rectangle, Renderer as _,
+        Shell, Size, Text, Theme, Vector, Widget, alignment, border, clipboard,
         keyboard::{self, key},
         layout,
         mouse::{self, click},
@@ -545,7 +545,6 @@ where
         layout: Layout<'_>,
         cursor: mouse::Cursor,
         renderer: &Renderer,
-        clipboard: &mut dyn Clipboard,
         shell: &mut Shell<'_, Message>,
         viewport: &Rectangle,
     ) {
@@ -714,10 +713,9 @@ where
                 keyboard::Key::Character("c")
                     if state.keyboard_modifiers.command() && !state.selection.is_empty() =>
                 {
-                    clipboard.write(
-                        clipboard::Kind::Standard,
+                    shell.write_clipboard(clipboard::Content::Text(
                         state.selection.text(&state.paragraph),
-                    );
+                    ));
 
                     shell.capture_event();
                 }
@@ -893,6 +891,7 @@ where
                 shaping: Shaping::Advanced,
                 wrapping,
                 hint_factor: renderer.scale_factor(),
+                ellipsis: text::Ellipsis::None,
             }) {
                 text::Difference::None => {}
                 text::Difference::Bounds => {
@@ -979,6 +978,7 @@ fn refresh_spans<Link>(
         shaping: Shaping::Advanced,
         wrapping,
         hint_factor,
+        ellipsis: text::Ellipsis::None,
     };
 
     state.paragraph = Paragraph::with_spans(text_with_spans);
