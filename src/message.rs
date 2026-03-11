@@ -139,8 +139,7 @@ impl Attachment {
     async fn new(ptr: AttachmentPointer, manager: &RegisteredManager) -> Self {
         let mime = ptr.content_type().parse::<Mime>().unwrap();
         let image = if mime.type_() == mime::IMAGE {
-            manager
-                .get_attachment(&ptr)
+            Box::pin(manager.get_attachment(&ptr))
                 .await
                 .ok()
                 .map(image::Handle::from_bytes)
@@ -678,17 +677,14 @@ async fn get_group_cached(
         }
     }
 
-    let avatar = manager
-        .retrieve_group_avatar(context)
-        .await
-        .ok()?
-        .map(image::Handle::from_bytes);
-
     let group = Group {
         key,
         revision,
         title: group.title,
-        avatar,
+        avatar: Box::pin(manager.retrieve_group_avatar(context))
+            .await
+            .ok()?
+            .map(image::Handle::from_bytes),
         members,
     };
 
@@ -713,22 +709,18 @@ async fn get_contact_cached(
 
     let profile_key = ProfileKey::create(profile_key.try_into().ok()?);
 
-    let avatar = manager
-        .retrieve_profile_avatar_by_uuid(uuid, profile_key)
-        .await
-        .ok()?
-        .map(image::Handle::from_bytes);
-
     let contact = Contact {
         key: profile_key.bytes,
         uuid,
-        name: manager
-            .retrieve_profile_by_uuid(uuid, profile_key)
+        name: Box::pin(manager.retrieve_profile_by_uuid(uuid, profile_key))
             .await
             .ok()?
             .name?
             .to_string(),
-        avatar,
+        avatar: Box::pin(manager.retrieve_profile_avatar_by_uuid(uuid, profile_key))
+            .await
+            .ok()?
+            .map(image::Handle::from_bytes),
         is_self: uuid == manager.registration_data().service_ids.aci,
     };
 

@@ -30,7 +30,7 @@ run-release *args: font db
   env RUST_BACKTRACE=full cargo run --release {{args}}
 
 prepare-sqlx: setup-sqlx-db font
-    cargo sqlx prepare --workspace --database-url "{{database_url}}"
+    cargo sqlx prepare --all --workspace --database-url "{{database_url}}"
 
 setup-sqlx-db:
     cargo sqlx database setup --database-url "{{database_url}}"

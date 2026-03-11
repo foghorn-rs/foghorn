@@ -32,7 +32,7 @@ pub fn markdown_to_body_ranges(input: &str) -> (String, Vec<BodyRange>) {
 
     let mut output = String::new();
     let mut count = 0; // count codepoints, not bytes
-    let mut ranges = Vec::new();
+    let mut ranges = vec![];
 
     let mut push_range = |count, pos, style| {
         ranges.push(BodyRange {
