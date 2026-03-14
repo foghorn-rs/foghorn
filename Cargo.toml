@@ -42,7 +42,7 @@ iced_widget = "0.15.0-dev"
 tracing = "0.1"
 unicode-segmentation = "1"
 uuid = "1"
-iced_selection = { git = "https://git.sr.ht/~pml68/iced_selection", branch = "feat/ellipsis" }
+iced_selection = { git = "https://git.sr.ht/~pml68/iced_selection" }
 
 [patch.crates-io]
 curve25519-dalek = { git = 'https://github.com/signalapp/curve25519-dalek', tag = 'signal-curve25519-4.1.3' }

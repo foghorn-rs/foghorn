@@ -705,9 +705,9 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.2.56"
+version = "1.2.57"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aebf35691d1bfb0ac386a69bac2fde4dd276fb618cf8bf4f5318fe285e821bb2"
+checksum = "7a0dd1ca384932ff3641c8718a02769f1698e7563dc6974ffd03346116310423"
 dependencies = [
  "find-msvc-tools",
  "jobserver",
@@ -1136,9 +1136,9 @@ dependencies = [
 
 [[package]]
 name = "derive-where"
-version = "1.6.0"
+version = "1.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ef941ded77d15ca19b40374869ac6000af1c9f2a4c0f3d4c70926287e6364a8f"
+checksum = "d08b3a0bcc0d079199cd476b2cae8435016ec11d1c0986c6901c5ac223041534"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2229,7 +2229,7 @@ dependencies = [
 [[package]]
 name = "iced"
 version = "0.15.0-dev"
-source = "git+https://github.com/iced-rs/iced?branch=master#a3cb227811e6a988adf4e4bcd173edc87367176f"
+source = "git+https://github.com/iced-rs/iced?branch=master#3fd974f54a294b2396f68e691703140c61e1e9e5"
 dependencies = [
  "iced_core",
  "iced_debug",
@@ -2245,7 +2245,7 @@ dependencies = [
 [[package]]
 name = "iced_core"
 version = "0.15.0-dev"
-source = "git+https://github.com/iced-rs/iced?branch=master#a3cb227811e6a988adf4e4bcd173edc87367176f"
+source = "git+https://github.com/iced-rs/iced?branch=master#3fd974f54a294b2396f68e691703140c61e1e9e5"
 dependencies = [
  "bitflags 2.11.0",
  "bytes",
@@ -2262,7 +2262,7 @@ dependencies = [
 [[package]]
 name = "iced_debug"
 version = "0.15.0-dev"
-source = "git+https://github.com/iced-rs/iced?branch=master#a3cb227811e6a988adf4e4bcd173edc87367176f"
+source = "git+https://github.com/iced-rs/iced?branch=master#3fd974f54a294b2396f68e691703140c61e1e9e5"
 dependencies = [
  "iced_core",
  "iced_futures",
@@ -2272,7 +2272,7 @@ dependencies = [
 [[package]]
 name = "iced_dialog"
 version = "0.15.0-dev"
-source = "git+https://git.sr.ht/~pml68/iced_dialog?branch=master#ff3a0804d472dfaed70e1901fcd93b68bd09fd07"
+source = "git+https://git.sr.ht/~pml68/iced_dialog?branch=master#fa2a722207220add7805a169131d8f40fb9dde32"
 dependencies = [
  "iced_core",
  "iced_widget",
@@ -2281,7 +2281,7 @@ dependencies = [
 [[package]]
 name = "iced_futures"
 version = "0.15.0-dev"
-source = "git+https://github.com/iced-rs/iced?branch=master#a3cb227811e6a988adf4e4bcd173edc87367176f"
+source = "git+https://github.com/iced-rs/iced?branch=master#3fd974f54a294b2396f68e691703140c61e1e9e5"
 dependencies = [
  "futures",
  "iced_core",
@@ -2295,7 +2295,7 @@ dependencies = [
 [[package]]
 name = "iced_graphics"
 version = "0.15.0-dev"
-source = "git+https://github.com/iced-rs/iced?branch=master#a3cb227811e6a988adf4e4bcd173edc87367176f"
+source = "git+https://github.com/iced-rs/iced?branch=master#3fd974f54a294b2396f68e691703140c61e1e9e5"
 dependencies = [
  "bitflags 2.11.0",
  "bytemuck",
@@ -2316,7 +2316,7 @@ dependencies = [
 [[package]]
 name = "iced_program"
 version = "0.15.0-dev"
-source = "git+https://github.com/iced-rs/iced?branch=master#a3cb227811e6a988adf4e4bcd173edc87367176f"
+source = "git+https://github.com/iced-rs/iced?branch=master#3fd974f54a294b2396f68e691703140c61e1e9e5"
 dependencies = [
  "iced_graphics",
  "iced_runtime",
@@ -2325,7 +2325,7 @@ dependencies = [
 [[package]]
 name = "iced_renderer"
 version = "0.15.0-dev"
-source = "git+https://github.com/iced-rs/iced?branch=master#a3cb227811e6a988adf4e4bcd173edc87367176f"
+source = "git+https://github.com/iced-rs/iced?branch=master#3fd974f54a294b2396f68e691703140c61e1e9e5"
 dependencies = [
  "iced_graphics",
  "iced_tiny_skia",
@@ -2337,7 +2337,7 @@ dependencies = [
 [[package]]
 name = "iced_runtime"
 version = "0.15.0-dev"
-source = "git+https://github.com/iced-rs/iced?branch=master#a3cb227811e6a988adf4e4bcd173edc87367176f"
+source = "git+https://github.com/iced-rs/iced?branch=master#3fd974f54a294b2396f68e691703140c61e1e9e5"
 dependencies = [
  "bytes",
  "iced_core",
@@ -2349,7 +2349,7 @@ dependencies = [
 [[package]]
 name = "iced_selection"
 version = "0.5.0"
-source = "git+https://git.sr.ht/~pml68/iced_selection?branch=feat%2Fellipsis#172727601b611075d557f2ce84dec87c59b99d95"
+source = "git+https://git.sr.ht/~pml68/iced_selection#d469b49cd70419e2038337e1dea120ffc66adbc7"
 dependencies = [
  "iced_widget",
  "unicode-segmentation",
@@ -2358,7 +2358,7 @@ dependencies = [
 [[package]]
 name = "iced_split"
 version = "0.2.0-dev"
-source = "git+https://github.com/edwloef/iced_split?branch=main#a748b7296a4d544ff0143777c4b31de5205afa5c"
+source = "git+https://github.com/edwloef/iced_split?branch=main#84e6846ef6dd578f35487a44f135da9276f6613a"
 dependencies = [
  "iced_core",
 ]
@@ -2366,7 +2366,7 @@ dependencies = [
 [[package]]
 name = "iced_tiny_skia"
 version = "0.15.0-dev"
-source = "git+https://github.com/iced-rs/iced?branch=master#a3cb227811e6a988adf4e4bcd173edc87367176f"
+source = "git+https://github.com/iced-rs/iced?branch=master#3fd974f54a294b2396f68e691703140c61e1e9e5"
 dependencies = [
  "bytemuck",
  "cosmic-text",
@@ -2382,7 +2382,7 @@ dependencies = [
 [[package]]
 name = "iced_wgpu"
 version = "0.15.0-dev"
-source = "git+https://github.com/iced-rs/iced?branch=master#a3cb227811e6a988adf4e4bcd173edc87367176f"
+source = "git+https://github.com/iced-rs/iced?branch=master#3fd974f54a294b2396f68e691703140c61e1e9e5"
 dependencies = [
  "bitflags 2.11.0",
  "bytemuck",
@@ -2402,7 +2402,7 @@ dependencies = [
 [[package]]
 name = "iced_widget"
 version = "0.15.0-dev"
-source = "git+https://github.com/iced-rs/iced?branch=master#a3cb227811e6a988adf4e4bcd173edc87367176f"
+source = "git+https://github.com/iced-rs/iced?branch=master#3fd974f54a294b2396f68e691703140c61e1e9e5"
 dependencies = [
  "iced_renderer",
  "log",
@@ -2416,7 +2416,7 @@ dependencies = [
 [[package]]
 name = "iced_winit"
 version = "0.15.0-dev"
-source = "git+https://github.com/iced-rs/iced?branch=master#a3cb227811e6a988adf4e4bcd173edc87367176f"
+source = "git+https://github.com/iced-rs/iced?branch=master#3fd974f54a294b2396f68e691703140c61e1e9e5"
 dependencies = [
  "arboard",
  "iced_debug",
@@ -3988,9 +3988,9 @@ dependencies = [
 
 [[package]]
 name = "once_cell"
-version = "1.21.3"
+version = "1.21.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "42f5e15c9953c5e4ccceeb2e7382a716482c34515315f7b03532b8b4e8393d2d"
+checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
 
 [[package]]
 name = "oncemutex"
@@ -4006,9 +4006,9 @@ checksum = "c08d65885ee38876c4f86fa503fb49d7b507c2b62552df7c70b2fce627e06381"
 
 [[package]]
 name = "orbclient"
-version = "0.3.50"
+version = "0.3.51"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "52ad2c6bae700b7aa5d1cc30c59bdd3a1c180b09dbaea51e2ae2b8e1cf211fdd"
+checksum = "59aed3b33578edcfa1bc96a321d590d31832b6ad55a26f0313362ce687e9abd6"
 dependencies = [
  "libc",
  "libredox",
@@ -6273,9 +6273,9 @@ dependencies = [
 
 [[package]]
 name = "tracing-subscriber"
-version = "0.3.22"
+version = "0.3.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2f30143827ddab0d256fd843b7a66d164e9f271cfa0dde49142c5ca0ca291f1e"
+checksum = "cb7f578e5945fb242538965c2d0b04418d38ec25c79d160cd279bf0731c8d319"
 dependencies = [
  "nu-ansi-term",
  "serde",

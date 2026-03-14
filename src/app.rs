@@ -347,7 +347,7 @@ impl App {
                     container(row![edit(), " Edit message"].align_y(Center))
                         .padding(10)
                         .style(|t: &iced::Theme| {
-                            let pair = t.extended_palette().primary.weak;
+                            let pair = t.palette().primary.weak;
                             container::Style {
                                 background: Some(pair.color.into()),
                                 text_color: Some(pair.text),
