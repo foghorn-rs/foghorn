@@ -14,7 +14,7 @@ iced = { version = "0.15.0-dev", features = [
 ] }
 
 foghorn_widgets = { path = "widget" }
-iced_dialog = { git = "https://git.sr.ht/~pml68/iced_dialog", branch = "master" }
+iced_dialog = { git = "git://git.pml68.dev/iced_dialog", branch = "master" }
 iced_split = { git = "https://github.com/edwloef/iced_split", branch = "main" }
 jiff = "0.2"
 mime = "0.3"
@@ -42,7 +42,7 @@ iced_widget = "0.15.0-dev"
 tracing = "0.1"
 unicode-segmentation = "1"
 uuid = "1"
-iced_selection = { git = "https://git.sr.ht/~pml68/iced_selection" }
+iced_selection = { git = "git://git.pml68.dev/iced_selection" }
 
 [patch.crates-io]
 curve25519-dalek = { git = 'https://github.com/signalapp/curve25519-dalek', tag = 'signal-curve25519-4.1.3' }
