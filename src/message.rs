@@ -11,6 +11,7 @@ use presage::{
     libsignal_service::{
         content::ContentBody,
         prelude::{Content, ProfileKey, Uuid},
+        protocol::ServiceId,
         zkgroup::{GroupMasterKeyBytes, ProfileKeyBytes},
     },
     proto::{
@@ -48,14 +49,14 @@ impl Chat {
 
     pub fn thread(&self) -> Thread {
         match self {
-            Self::Contact(contact) => Thread::Contact(contact.uuid),
+            Self::Contact(contact) => Thread::Contact(contact.id),
             Self::Group(group) => Thread::Group(group.key),
         }
     }
 
     pub fn uuid(&self) -> Option<Uuid> {
         match self {
-            Self::Contact(contact) => Some(contact.uuid),
+            Self::Contact(contact) => Some(contact.id.raw_uuid()),
             Self::Group(_) => None,
         }
     }
@@ -89,7 +90,7 @@ impl Chat {
 #[derive(Debug, Eq)]
 pub struct Contact {
     pub key: ProfileKeyBytes,
-    pub uuid: Uuid,
+    pub id: ServiceId,
     pub name: String,
     pub avatar: Option<image::Handle>,
     pub is_self: bool,
@@ -97,13 +98,13 @@ pub struct Contact {
 
 impl PartialEq for Contact {
     fn eq(&self, other: &Self) -> bool {
-        self.uuid.eq(&other.uuid)
+        self.id.eq(&other.id)
     }
 }
 
 impl Hash for Contact {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.uuid.hash(state);
+        self.id.hash(state);
     }
 }
 
@@ -168,7 +169,7 @@ impl Message {
         timestamp: u64,
         body: Option<String>,
         attachments: Vec<AttachmentPointer>,
-        sender: Uuid,
+        sender: ServiceId,
         sticker: Option<data_message::Sticker>,
         quote: Option<data_message::Quote>,
         cache: &RefCell<HashMap<Thread, Chat>>,
@@ -232,7 +233,8 @@ impl Quote {
                 .await,
             sender: quote
                 .author_aci
-                .and_then(|sender| sender.parse().ok())
+                .as_deref()
+                .and_then(ServiceId::parse_from_service_id_string)
                 .and_then(|sender| cache.borrow().get(&Thread::Contact(sender))?.contact()),
         }
     }
@@ -251,9 +253,12 @@ impl From<Message> for Quote {
 
 impl From<Quote> for data_message::Quote {
     fn from(value: Quote) -> Self {
+        let id = value.sender.map(|sender| sender.id);
+
         Self {
             id: Some(value.timestamp.as_millisecond() as u64),
-            author_aci: value.sender.map(|sender| sender.uuid.to_string()),
+            author_aci_binary: id.as_ref().map(ServiceId::service_id_binary),
+            author_aci: id.map(|id| id.raw_uuid().to_string()),
             text: value
                 .body
                 .as_deref()
@@ -287,7 +292,7 @@ pub async fn sync_contacts(
     c: &mut mpsc::Sender<(Chat, SignalAction)>,
 ) {
     let me = get_contact_cached(
-        manager.registration_data().service_ids.aci,
+        ServiceId::Aci(manager.registration_data().service_ids.aci.into()),
         manager.registration_data().profile_key().bytes,
         manager,
         cache,
@@ -304,8 +309,13 @@ pub async fn sync_contacts(
         .flatten()
         .flatten()
     {
-        if let Some(contact) =
-            get_contact_cached(contact.uuid, contact.profile_key, manager, cache).await
+        if let Some(contact) = get_contact_cached(
+            ServiceId::Aci(contact.uuid.into()),
+            contact.profile_key,
+            manager,
+            cache,
+        )
+        .await
         {
             c.send((contact, SignalAction::Contact)).await.unwrap();
         }
@@ -347,7 +357,7 @@ pub async fn sync_messages(
         .into_iter()
         .flatten()
         .flatten()
-        .map(|c| Thread::Contact(c.uuid))
+        .map(|c| Thread::Contact(ServiceId::Aci(c.uuid.into())))
         .chain(
             manager
                 .store()
@@ -404,20 +414,14 @@ pub async fn decode_content(
             let chat = if let Some(context) = group_v2 {
                 get_group_cached(context, manager, cache).await?
             } else {
-                get_contact_cached(
-                    content.metadata.sender.raw_uuid(),
-                    profile_key?,
-                    manager,
-                    cache,
-                )
-                .await?
+                get_contact_cached(content.metadata.sender, profile_key?, manager, cache).await?
             };
 
             let message = Message::new(
                 content.metadata.timestamp,
                 body,
                 attachments,
-                content.metadata.sender.raw_uuid(),
+                content.metadata.sender,
                 sticker,
                 quote,
                 cache,
@@ -472,15 +476,15 @@ pub async fn decode_content(
             let chat = if let Some(context) = group_v2 {
                 get_group_cached(context, manager, cache).await?
             } else {
-                let uuid = destination_service_id?.parse().ok()?;
-                get_contact_cached(uuid, profile_key?, manager, cache).await?
+                let id = ServiceId::parse_from_service_id_string(&destination_service_id?)?;
+                get_contact_cached(id, profile_key?, manager, cache).await?
             };
 
             let message = Message::new(
                 content.metadata.timestamp,
                 body,
                 attachments,
-                content.metadata.sender.raw_uuid(),
+                content.metadata.sender,
                 sticker,
                 quote,
                 cache,
@@ -512,13 +516,7 @@ pub async fn decode_content(
             let chat = if let Some(context) = group_v2 {
                 get_group_cached(context, manager, cache).await?
             } else {
-                get_contact_cached(
-                    content.metadata.sender.raw_uuid(),
-                    profile_key?,
-                    manager,
-                    cache,
-                )
-                .await?
+                get_contact_cached(content.metadata.sender, profile_key?, manager, cache).await?
             };
 
             Some((
@@ -551,8 +549,8 @@ pub async fn decode_content(
             let chat = if let Some(context) = group_v2 {
                 get_group_cached(context, manager, cache).await?
             } else {
-                let uuid = destination_service_id?.parse().ok()?;
-                get_contact_cached(uuid, profile_key?, manager, cache).await?
+                let id = ServiceId::parse_from_service_id_string(&destination_service_id?)?;
+                get_contact_cached(id, profile_key?, manager, cache).await?
             };
 
             Some((
@@ -577,20 +575,14 @@ pub async fn decode_content(
             let chat = if let Some(context) = group_v2 {
                 get_group_cached(context, manager, cache).await?
             } else {
-                get_contact_cached(
-                    content.metadata.sender.raw_uuid(),
-                    profile_key?,
-                    manager,
-                    cache,
-                )
-                .await?
+                get_contact_cached(content.metadata.sender, profile_key?, manager, cache).await?
             };
 
             let message = Message::new(
                 content.metadata.timestamp,
                 body,
                 attachments,
-                content.metadata.sender.raw_uuid(),
+                content.metadata.sender,
                 sticker,
                 quote,
                 cache,
@@ -625,15 +617,15 @@ pub async fn decode_content(
             let chat = if let Some(context) = group_v2 {
                 get_group_cached(context, manager, cache).await?
             } else {
-                let uuid = destination_service_id?.parse().ok()?;
-                get_contact_cached(uuid, profile_key?, manager, cache).await?
+                let id = ServiceId::parse_from_service_id_string(&destination_service_id?)?;
+                get_contact_cached(id, profile_key?, manager, cache).await?
             };
 
             let message = Message::new(
                 content.metadata.timestamp,
                 body,
                 attachments,
-                content.metadata.sender.raw_uuid(),
+                content.metadata.sender,
                 sticker,
                 quote,
                 cache,
@@ -696,12 +688,12 @@ async fn get_group_cached(
 }
 
 async fn get_contact_cached(
-    uuid: Uuid,
+    id: ServiceId,
     profile_key: impl TryInto<ProfileKeyBytes>,
     manager: &mut RegisteredManager,
     cache: &RefCell<HashMap<Thread, Chat>>,
 ) -> Option<Chat> {
-    let chat = Thread::Contact(uuid);
+    let chat = Thread::Contact(id);
 
     if let Some(chat) = cache.borrow().get(&chat) {
         return Some(chat.clone());
@@ -711,17 +703,17 @@ async fn get_contact_cached(
 
     let contact = Contact {
         key: profile_key.bytes,
-        uuid,
-        name: Box::pin(manager.retrieve_profile_by_uuid(uuid, profile_key))
+        id,
+        name: Box::pin(manager.retrieve_profile_by_uuid(id.raw_uuid(), profile_key))
             .await
             .ok()?
             .name?
             .to_string(),
-        avatar: Box::pin(manager.retrieve_profile_avatar_by_uuid(uuid, profile_key))
+        avatar: Box::pin(manager.retrieve_profile_avatar_by_uuid(id.raw_uuid(), profile_key))
             .await
             .ok()?
             .map(image::Handle::from_bytes),
-        is_self: uuid == manager.registration_data().service_ids.aci,
+        is_self: id.raw_uuid() == manager.registration_data().service_ids.aci,
     };
 
     cache

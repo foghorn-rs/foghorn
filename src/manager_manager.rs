@@ -9,9 +9,7 @@ use iced::futures::{
 };
 use jiff::Timestamp;
 use presage::{
-    libsignal_service::{
-        configuration::SignalServers, content::Metadata, prelude::Content, protocol::Aci,
-    },
+    libsignal_service::{configuration::SignalServers, content::Metadata, prelude::Content},
     manager::{Linking, Registered},
     model::{identity::OnNewIdentity, messages::Received},
     proto::{DataMessage, EditMessage, SyncMessage, sync_message::Sent},
@@ -261,7 +259,7 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Event>) {
 
                     match &chat {
                         Chat::Contact(contact) => Box::pin(manager.send_message(
-                            Aci::from(contact.uuid),
+                            contact.id,
                             message.clone(),
                             metadata.timestamp,
                         ))
@@ -348,13 +346,11 @@ async fn manager_manager(mut receiver: mpsc::Receiver<Event>) {
                         .await;
 
                     match &chat {
-                        Chat::Contact(contact) => Box::pin(manager.send_message(
-                            Aci::from(contact.uuid),
-                            message.clone(),
-                            now,
-                        ))
-                        .await
-                        .unwrap(),
+                        Chat::Contact(contact) => {
+                            Box::pin(manager.send_message(contact.id, message.clone(), now))
+                                .await
+                                .unwrap();
+                        }
                         Chat::Group(group) => {
                             Box::pin(manager.send_message_to_group(
                                 &group.key,

@@ -6,7 +6,7 @@ use crate::{
     },
 };
 use presage::{
-    libsignal_service::prelude::Uuid,
+    libsignal_service::{prelude::Uuid, protocol::ServiceId},
     proto::{
         BodyRange,
         body_range::{AssociatedValue, Style},
@@ -191,13 +191,21 @@ pub fn body_ranges_to_signal_spans(
         let start = range.start() as usize;
         let end = start + range.length() as usize;
 
-        let mut mention: Option<Uuid> = None;
+        let mut mention: Option<ServiceId> = None;
         let Some(style_flag) = range
             .associated_value
             .as_ref()
             .and_then(|value| match value {
                 AssociatedValue::MentionAci(aci) => {
-                    mention = aci.parse().ok();
+                    mention = aci
+                        .parse::<Uuid>()
+                        .ok()
+                        .map(|aci| ServiceId::Aci(aci.into()));
+
+                    Some(0)
+                }
+                AssociatedValue::MentionAciBinary(aci) => {
+                    mention = ServiceId::parse_from_service_id_binary(aci);
 
                     Some(0)
                 }
@@ -214,14 +222,14 @@ pub fn body_ranges_to_signal_spans(
             next_spoiler_tag += 1;
         }
 
-        if let Some(uuid) = mention
+        if let Some(id) = mention
             && let Some(name) = cache
                 .borrow()
-                .get(&Thread::Contact(uuid))?
+                .get(&Thread::Contact(id))?
                 .contact()
                 .map(|contact| contact.name.clone())
         {
-            mentions.insert(start, (uuid, name));
+            mentions.insert(start, (id.raw_uuid(), name));
         }
 
         for flag in &mut flags[start..end] {
@@ -286,7 +294,7 @@ pub fn body_ranges_to_markdown(body: Option<&str>, body_ranges: &[BodyRange]) ->
             .associated_value
             .as_ref()
             .and_then(|value| match value {
-                AssociatedValue::MentionAci(_) => Some(0),
+                AssociatedValue::MentionAci(_) | AssociatedValue::MentionAciBinary(_) => Some(0),
                 AssociatedValue::Style(style @ 1..=5) => Some(*style),
                 AssociatedValue::Style(_) => None,
             })
