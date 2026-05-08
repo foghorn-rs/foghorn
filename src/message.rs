@@ -1,3 +1,5 @@
+mod view;
+
 use crate::{
     log, manager_manager::RegisteredManager, parse::body_ranges_to_signal_spans, widget::SignalSpan,
 };
@@ -11,16 +13,17 @@ use presage::{
     libsignal_service::{
         content::ContentBody,
         prelude::{Content, ProfileKey, Uuid},
-        protocol::ServiceId,
+        protocol::{ServiceId, ServiceIdKind},
         zkgroup::{GroupMasterKeyBytes, ProfileKeyBytes},
     },
     proto::{
         AttachmentPointer, BodyRange, DataMessage, EditMessage, GroupContextV2, SyncMessage,
+        conversation_identifier::Identifier,
         data_message::{
             self, Delete,
             quote::{self, QuotedAttachment},
         },
-        sync_message::Sent,
+        sync_message::{DeleteForMe, Sent},
     },
     store::{ContentsStore as _, Thread},
 };
@@ -30,8 +33,6 @@ use std::{
     hash::{Hash, Hasher},
     sync::Arc,
 };
-
-mod view;
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum Chat {
@@ -283,7 +284,7 @@ pub enum SignalAction {
     Contact,
     Message(Arc<Message>, bool),
     Replace(Timestamp, Arc<Message>),
-    Delete(Timestamp),
+    Delete(Vec<Timestamp>),
 }
 
 pub async fn sync_contacts(
@@ -331,8 +332,8 @@ pub async fn sync_contacts(
     {
         if let Some(group) = get_group_cached(
             GroupContextV2 {
-                revision: Some(group.1.revision),
                 master_key: Some(group.0.into()),
+                revision: Some(group.1.revision),
                 group_change: None,
             },
             manager,
@@ -521,9 +522,9 @@ pub async fn decode_content(
 
             Some((
                 chat,
-                SignalAction::Delete(
+                SignalAction::Delete(vec![
                     Timestamp::from_millisecond(target_sent_timestamp? as i64).unwrap(),
-                ),
+                ]),
             ))
         }
         ContentBody::SynchronizeMessage(SyncMessage {
@@ -555,10 +556,67 @@ pub async fn decode_content(
 
             Some((
                 chat,
-                SignalAction::Delete(
+                SignalAction::Delete(vec![
                     Timestamp::from_millisecond(target_sent_timestamp? as i64).unwrap(),
-                ),
+                ]),
             ))
+        }
+        ContentBody::SynchronizeMessage(SyncMessage {
+            delete_for_me: Some(DeleteForMe {
+                message_deletes, ..
+            }),
+            ..
+        }) => {
+            // a message deleted by us, only for us
+
+            let chat = match message_deletes[0]
+                .conversation
+                .as_ref()?
+                .identifier
+                .as_ref()?
+            {
+                Identifier::ThreadServiceId(id_string) => {
+                    let id = ServiceId::parse_from_service_id_string(id_string)?;
+                    let contact = manager.store().contact_by_id(&id).await.ok().flatten()?;
+                    get_contact_cached(id, contact.profile_key, manager, cache).await?
+                }
+                Identifier::ThreadGroupId(master_key) => {
+                    let group = manager
+                        .store()
+                        .group(master_key.as_slice().try_into().ok()?)
+                        .await
+                        .ok()?;
+
+                    get_group_cached(
+                        GroupContextV2 {
+                            master_key: Some(master_key.clone()),
+                            revision: group.map(|group| group.revision),
+                            group_change: None,
+                        },
+                        manager,
+                        cache,
+                    )
+                    .await?
+                }
+                Identifier::ThreadServiceIdBinary(id_bytes) => {
+                    let id = ServiceId::parse_from_service_id_binary(id_bytes)?;
+                    let contact = manager.store().contact_by_id(&id).await.ok().flatten()?;
+                    get_contact_cached(id, contact.profile_key, manager, cache).await?
+                }
+                Identifier::ThreadE164(_) => return None,
+            };
+
+            let timestamps = message_deletes
+                .iter()
+                .map(|message_deletes| {
+                    message_deletes.messages.iter().map(|message| {
+                        Timestamp::from_millisecond(message.sent_timestamp() as i64).unwrap()
+                    })
+                })
+                .flatten()
+                .collect();
+
+            Some((chat, SignalAction::Delete(timestamps)))
         }
         ContentBody::DataMessage(DataMessage {
             body,
@@ -713,7 +771,10 @@ async fn get_contact_cached(
             .await
             .ok()?
             .map(image::Handle::from_bytes),
-        is_self: id.raw_uuid() == manager.registration_data().service_ids.aci,
+        is_self: match id.kind() {
+            ServiceIdKind::Aci => id.raw_uuid() == manager.registration_data().service_ids.aci,
+            ServiceIdKind::Pni => id.raw_uuid() == manager.registration_data().service_ids.pni,
+        },
     };
 
     cache

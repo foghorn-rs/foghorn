@@ -182,8 +182,10 @@ impl App {
                 SignalAction::Replace(old_ts, message) => {
                     self.chats.get_mut(&chat).unwrap().insert(old_ts, message);
                 }
-                SignalAction::Delete(timestamp) => {
-                    self.chats.get_mut(&chat).unwrap().remove(&timestamp);
+                SignalAction::Delete(timestamps) => {
+                    for timestamp in timestamps {
+                        self.chats.get_mut(&chat).unwrap().remove(&timestamp);
+                    }
                 }
             },
             Message::CloseDialog => self.dialog.close(),
