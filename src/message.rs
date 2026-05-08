@@ -603,7 +603,17 @@ pub async fn decode_content(
                     let contact = manager.store().contact_by_id(&id).await.ok().flatten()?;
                     get_contact_cached(id, contact.profile_key, manager, cache).await?
                 }
-                Identifier::ThreadE164(_) => return None,
+                Identifier::ThreadE164(e164) => {
+                    let id = manager
+                        .discover_contacts_by_phone_number([e164.as_str()])
+                        .await
+                        .ok()?
+                        .get(0)?
+                        .1?;
+
+                    let contact = manager.store().contact_by_id(&id).await.ok().flatten()?;
+                    get_contact_cached(id, contact.profile_key, manager, cache).await?
+                }
             };
 
             let timestamps = message_deletes
