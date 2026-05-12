@@ -94,6 +94,7 @@ impl Message {
         self: &Arc<Self>,
         now: &Zoned,
         tz: &TimeZone,
+        max_width: f32,
     ) -> Element<'_, app::Message> {
         let timestamp = format_zoned(&self.timestamp.to_zoned(tz.clone()), now);
 
@@ -107,7 +108,7 @@ impl Message {
                 self.attachments
                     .iter()
                     .filter_map(|attachment| attachment.image.clone())
-                    .map(|handle| image(handle).width(325).into()),
+                    .map(|handle| image(handle).width(max_width / 2.).into()),
             )),
             column![
                 text(head).size(10),
@@ -129,9 +130,9 @@ impl Message {
 
         let content = container(content)
             .max_width(if self.attachments.is_empty() {
-                650
+                max_width - 5. * 4. - 2. * (16. + 10.) - 50.
             } else {
-                335
+                max_width / 2. + 10.
             })
             .padding(10)
             .style(|t| {
@@ -149,11 +150,13 @@ impl Message {
             self.sender.is_self.then(|| {
                 button(edit())
                     .style(button::text)
+                    .padding(5)
                     .on_press(app::Message::Edit(Some(self.clone())))
             }),
             Some(
                 button(reply())
                     .style(button::text)
+                    .padding(5)
                     .on_press(app::Message::Quote(Some(self.clone()))),
             ),
         ];

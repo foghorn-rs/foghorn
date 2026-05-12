@@ -6,6 +6,8 @@ macro_rules! icon {
         pub fn $name<'a>() -> ::iced::widget::Text<'a> {
             ::iced::widget::text(const { ::core::char::from_u32($icon).unwrap() })
                 .font(LUCIDE_FONT)
+                .width(16)
+                .height(16)
                 .line_height(1.0)
         }
     };

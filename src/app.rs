@@ -16,7 +16,7 @@ use iced::{
     widget::{
         button, column, container,
         operation::{RelativeOffset, focus_next, snap_to},
-        qr_code, row, rule, scrollable, space, text, text_editor,
+        qr_code, responsive, row, rule, scrollable, space, text, text_editor,
     },
 };
 use iced_split::{Strategy, vertical_split};
@@ -297,125 +297,128 @@ impl App {
     }
 
     pub fn view(&self) -> Element<'_, Message> {
-        let mut contacts = self.chats.keys().collect::<Vec<_>>();
-        contacts.sort_by_key(|c| Reverse(self.chats[c].last_key_value().map(|(k, _)| k)));
-        let contacts = column![
-            "Chats",
-            rule::horizontal(1),
-            scrollable(
-                column(contacts.into_iter().map(|c| {
-                    button(c.as_iced_widget())
-                        .on_press(Message::OpenChat(c.clone()))
-                        .padding(5)
-                        .style(button::subtle)
-                        .into()
-                }))
-                .spacing(5)
-            )
-            .auto_scroll(true)
-            .spacing(5)
-        ]
-        .spacing(5)
-        .padding(padding::all(5).right(0));
-
-        let chat = if let Some(tz) = self.tz.as_ref()
-            && let Some(now) = self.now
-            && let Some(open_chat) = self.open_chat.as_ref()
-        {
-            let now = now.to_zoned(tz.clone());
-
-            column![
-                text(open_chat.name()),
+        responsive(|size| {
+            let mut contacts = self.chats.keys().collect::<Vec<_>>();
+            contacts.sort_by_key(|c| Reverse(self.chats[c].last_key_value().map(|(k, _)| k)));
+            let contacts = column![
+                "Chats",
                 rule::horizontal(1),
                 scrollable(
-                    column(
-                        self.chats[open_chat]
-                            .values()
-                            .map(|message| { message.as_iced_widget(&now, tz) }),
-                    )
-                    .spacing(5),
+                    column(contacts.into_iter().map(|c| {
+                        button(c.as_iced_widget())
+                            .on_press(Message::OpenChat(c.clone()))
+                            .padding(5)
+                            .style(button::subtle)
+                            .into()
+                    }))
+                    .spacing(5)
                 )
-                .id("messages")
                 .auto_scroll(true)
-                .height(Fill)
-                .anchor_top()
-                .spacing(5),
-                self.quote
-                    .as_ref()
-                    .map(|quote| quote.as_iced_widget(&now, tz)),
-                self.editing.as_ref().and(Some(
-                    container(row![edit(), " Edit message"].align_y(Center))
-                        .padding(10)
-                        .style(|t: &iced::Theme| {
-                            let pair = t.palette().primary.weak;
-                            container::Style {
-                                background: Some(pair.color.into()),
-                                text_color: Some(pair.text),
-                                border: border::rounded(5),
-                                ..Default::default()
-                            }
-                        })
-                )),
-                rule::horizontal(1),
-                text_editor(&self.message_content)
-                    .min_height(20)
-                    .on_action(Message::ContentEdit)
-                    .key_binding(|key_press| {
-                        let modifiers = key_press.modifiers;
-                        let binding = text_editor::Binding::from_key_press(key_press)?;
-
-                        Some(match binding {
-                            text_editor::Binding::Enter if !modifiers.shift() => {
-                                text_editor::Binding::Custom(Message::Send)
-                            }
-                            text_editor::Binding::Backspace
-                                if modifiers.command()
-                                    && self.message_content.selection().is_none() =>
-                            {
-                                text_editor::Binding::Sequence(vec![
-                                    text_editor::Binding::Select(text_editor::Motion::WordLeft),
-                                    text_editor::Binding::Backspace,
-                                ])
-                            }
-                            text_editor::Binding::Delete
-                                if modifiers.command()
-                                    && self.message_content.selection().is_none() =>
-                            {
-                                text_editor::Binding::Sequence(vec![
-                                    text_editor::Binding::Select(text_editor::Motion::WordRight),
-                                    text_editor::Binding::Delete,
-                                ])
-                            }
-                            text_editor::Binding::Move(text_editor::Motion::Up)
-                                if self
-                                    .message_content
-                                    .line(0)
-                                    .is_none_or(|line| line.text.is_empty())
-                                    && self.message_content.line_count() <= 1 =>
-                            {
-                                text_editor::Binding::Custom(Message::EditLast)
-                            }
-                            binding => binding,
-                        })
-                    }),
+                .spacing(5)
             ]
             .spacing(5)
-            .padding(padding::all(5).left(0))
-            .into()
-        } else {
-            Element::new(space::horizontal())
-        };
+            .padding(padding::all(5).right(0));
 
-        let base = vertical_split(contacts, chat, self.split_at, Message::SplitAt)
-            .strategy(Strategy::Start);
+            let chat = if let Some(tz) = self.tz.as_ref()
+                && let Some(now) = self.now
+                && let Some(open_chat) = self.open_chat.as_ref()
+            {
+                let now = now.to_zoned(tz.clone());
 
-        let dialog = self
-            .dialog
-            .as_iced_dialog(container(base).width(Fill).height(Fill))
-            .max_height(320)
-            .max_width(iced_dialog::dialog::DEFAULT_MAX_WIDTH);
+                column![
+                    text(open_chat.name()),
+                    rule::horizontal(1),
+                    scrollable(
+                        column(self.chats[open_chat].values().map(|message| {
+                            message.as_iced_widget(&now, tz, size.width - self.split_at)
+                        }),)
+                        .spacing(5),
+                    )
+                    .id("messages")
+                    .auto_scroll(true)
+                    .height(Fill)
+                    .anchor_top()
+                    .spacing(5),
+                    self.quote
+                        .as_ref()
+                        .map(|quote| quote.as_iced_widget(&now, tz)),
+                    self.editing.as_ref().and(Some(
+                        container(row![edit(), " Edit message"].align_y(Center))
+                            .padding(10)
+                            .style(|t: &iced::Theme| {
+                                let pair = t.palette().primary.weak;
+                                container::Style {
+                                    background: Some(pair.color.into()),
+                                    text_color: Some(pair.text),
+                                    border: border::rounded(5),
+                                    ..Default::default()
+                                }
+                            })
+                    )),
+                    rule::horizontal(1),
+                    text_editor(&self.message_content)
+                        .min_height(20)
+                        .on_action(Message::ContentEdit)
+                        .key_binding(|key_press| {
+                            let modifiers = key_press.modifiers;
+                            let binding = text_editor::Binding::from_key_press(key_press)?;
 
-        dialog.into()
+                            Some(match binding {
+                                text_editor::Binding::Enter if !modifiers.shift() => {
+                                    text_editor::Binding::Custom(Message::Send)
+                                }
+                                text_editor::Binding::Backspace
+                                    if modifiers.command()
+                                        && self.message_content.selection().is_none() =>
+                                {
+                                    text_editor::Binding::Sequence(vec![
+                                        text_editor::Binding::Select(text_editor::Motion::WordLeft),
+                                        text_editor::Binding::Backspace,
+                                    ])
+                                }
+                                text_editor::Binding::Delete
+                                    if modifiers.command()
+                                        && self.message_content.selection().is_none() =>
+                                {
+                                    text_editor::Binding::Sequence(vec![
+                                        text_editor::Binding::Select(
+                                            text_editor::Motion::WordRight,
+                                        ),
+                                        text_editor::Binding::Delete,
+                                    ])
+                                }
+                                text_editor::Binding::Move(text_editor::Motion::Up)
+                                    if self
+                                        .message_content
+                                        .line(0)
+                                        .is_none_or(|line| line.text.is_empty())
+                                        && self.message_content.line_count() <= 1 =>
+                                {
+                                    text_editor::Binding::Custom(Message::EditLast)
+                                }
+                                binding => binding,
+                            })
+                        }),
+                ]
+                .spacing(5)
+                .padding(padding::all(5).left(0))
+                .into()
+            } else {
+                Element::new(space::horizontal())
+            };
+
+            let base = vertical_split(contacts, chat, self.split_at, Message::SplitAt)
+                .strategy(Strategy::Start);
+
+            let dialog = self
+                .dialog
+                .as_iced_dialog(container(base).width(Fill).height(Fill))
+                .max_height(320)
+                .max_width(iced_dialog::dialog::DEFAULT_MAX_WIDTH);
+
+            dialog.into()
+        })
+        .into()
     }
 
     #[expect(clippy::unused_self)]
