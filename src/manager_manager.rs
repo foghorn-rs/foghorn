@@ -146,7 +146,7 @@ impl ManagerManager {
 
 async fn manager_manager(mut receiver: mpsc::Receiver<Event>) {
     let store = SqliteStore::open(
-        concat!(env!("CARGO_MANIFEST_DIR"), "/foghorn.db"),
+        concat!("file:", env!("CARGO_MANIFEST_DIR"), "/foghorn.db?mode=rwc"),
         OnNewIdentity::Trust,
     )
     .await

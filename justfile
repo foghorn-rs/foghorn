@@ -1,12 +1,7 @@
-database_url := ("sqlite://" + justfile_directory() + "/foghorn.db")
-
 default: build-release
 
 font:
   @[ -f Lucide.ttf ] || curl -fsSLO https://unpkg.com/lucide-static@latest/font/Lucide.ttf
-
-db:
-  @[ -f foghorn.db ] || just prepare-sqlx
 
 clean:
   rm -f Lucide.ttf debug_log.json
@@ -14,29 +9,21 @@ clean:
 clean-all: clean
   rm -f foghorn.db foghorn.db-shm foghorn.db-wal
 
-build-debug *args: font db
+build-debug *args: font
   cargo build -F iced/debug {{args}}
 
-build-release *args: font db
+build-release *args: font
   cargo build --release {{args}}
 
-run-hot *args: font db
+run-hot *args: font
+  @command -v cargo-hot >/dev/null 2>&1 || just install-cargo-hot
   env RUST_BACKTRACE=full cargo hot -F iced/hot {{args}}
 
-run-debug *args: font db
+run-debug *args: font
   env RUST_BACKTRACE=full cargo run -F iced/debug {{args}}
 
-run-release *args: font db
+run-release *args: font
   env RUST_BACKTRACE=full cargo run --release {{args}}
 
-prepare-sqlx: setup-sqlx-db font
-    cargo sqlx prepare --all --workspace --database-url "{{database_url}}"
-
-setup-sqlx-db:
-    cargo sqlx database setup --database-url "{{database_url}}"
-
-install-sqlx:
-    cargo install sqlx-cli@0.8.6
-
 install-cargo-hot:
-    cargo install cargo-hot --git https://github.com/hecrj/cargo-hot
+  cargo install cargo-hot --git https://github.com/hecrj/cargo-hot
